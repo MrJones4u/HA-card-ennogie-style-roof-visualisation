@@ -20,8 +20,8 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
         <button class=${"power"===this._mode?"on":""} @click=${()=>this._mode="power"}>Power</button>
         <button class=${"relative"===this._mode?"on":""} @click=${()=>this._mode="relative"}>Relative</button>
       </div>
-    </div>`}_cellColor(t,e,s){const i=t.inv.get(e),n=i?.inputs[s];if(!i||!n)return{fill:"#3a3a3a",status:"missing"};if("missing"===n.status||"offline"===n.status)return{fill:"#1a1a1a",status:n.status,s:n};if("relative"===this._mode)return t.day&&null!==n.rel?{fill:St(At,n.rel),status:n.status,s:n}:{fill:St(kt,0),status:n.status,s:n};const o=this._config.panel_wp??400;return{fill:St(kt,Math.sqrt(Math.max(0,n.wpp??0)/o)),status:n.status,s:n}}_renderRoof(t){const e=this._model,s=.5,i=[e.bbox.x-s,e.bbox.y-s,e.bbox.w+1+2.2,e.bbox.h+1],n=this._config.north??0,o=this._selected,r=this._hoverKey,a=this._config.outline??"panels",l="faces"===a?e.faces.map(t=>{const e=t.bbox;return W`<rect class="face" x=${e.x-.08} y=${e.y-.08} width=${e.w+.16} height=${e.h+.16} rx="0.08"></rect>`}):"panels"===a&&this._outline?W`<path class="face" d=${this._outline} fill-rule="evenodd"></path>`:B,c=e.cells.map(e=>{if(e.dummy)return W`<rect class="dummy" x=${e.x+.02} y=${e.y+.02} width=${e.w-.04} height=${e.h-.04}></rect>`;const{fill:s,status:i,s:n}=this._cellColor(t,e.slot,e.input),a=ut(e.slot,e.input),l=void 0!==o&&o!==e.slot,c=o===e.slot||r===a,h=this._picked.includes(this._cellId(e)),d=`Inverter ${e.slot} · input ${e.input+1} · ${n?.panels??0} panels\n${zt(n?.power)} · ${null!=n?.wpp?Math.round(n.wpp)+" W/panel":"–"} · ${Ut(n?.rel)} of median\n${xt[i]}`;return W`<g class="cell ${l?"dim":""}" @click=${t=>this._cellClick(t,e)}
-          @mouseenter=${()=>this._hoverKey=a} @mouseleave=${()=>this._hoverKey=void 0}>
+    </div>`}_cellColor(t,e,s){const i=t.inv.get(e),n=i?.inputs[s];if(!i||!n)return{fill:"#3a3a3a",status:"missing"};if("missing"===n.status||"offline"===n.status)return{fill:"#1a1a1a",status:n.status,s:n};if("relative"===this._mode)return t.day&&null!==n.rel?{fill:St(At,n.rel),status:n.status,s:n}:{fill:St(kt,0),status:n.status,s:n};const o=this._config.panel_wp??400;return{fill:St(kt,Math.sqrt(Math.max(0,n.wpp??0)/o)),status:n.status,s:n}}_renderRoof(t){const e=this._model,s=this._config.slot_labels??"eave",i="eave"===s?.75:.5,n=[e.bbox.x-i,e.bbox.y-i,e.bbox.w+2*i+2.2,e.bbox.h+2*i],o=this._config.north??0,r=this._selected,a=this._hoverKey,l=this._config.outline??"panels",c="faces"===l?e.faces.map(t=>{const e=t.bbox;return W`<rect class="face" x=${e.x-.08} y=${e.y-.08} width=${e.w+.16} height=${e.h+.16} rx="0.08"></rect>`}):"panels"===l&&this._outline?W`<path class="face" d=${this._outline} fill-rule="evenodd"></path>`:B,h=e.cells.map(e=>{if(e.dummy)return W`<rect class="dummy" x=${e.x+.02} y=${e.y+.02} width=${e.w-.04} height=${e.h-.04}></rect>`;const{fill:s,status:i,s:n}=this._cellColor(t,e.slot,e.input),o=ut(e.slot,e.input),l=void 0!==r&&r!==e.slot,c=r===e.slot||a===o,h=this._picked.includes(this._cellId(e)),d=`Inverter ${e.slot} · input ${e.input+1} · ${n?.panels??0} panels\n${zt(n?.power)} · ${null!=n?.wpp?Math.round(n.wpp)+" W/panel":"–"} · ${Ut(n?.rel)} of median\n${xt[i]}`;return W`<g class="cell ${l?"dim":""}" @click=${t=>this._cellClick(t,e)}
+          @mouseenter=${()=>this._hoverKey=o} @mouseleave=${()=>this._hoverKey=void 0}>
         <title>${d}</title>
         <rect x=${e.x+.025} y=${e.y+.025} width=${e.w-.05} height=${e.h-.05} fill=${s} class="panel"></rect>
         <rect x=${e.x+.025} y=${e.y+.025} width=${e.w-.05} height=${e.h-.05} fill="url(#glass)" pointer-events="none"></rect>
@@ -29,19 +29,19 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
         ${"fault"===i||"low"===i?W`<rect x=${e.x+.06} y=${e.y+.06} width=${e.w-.12} height=${e.h-.12} fill="none" stroke=${bt[i]} stroke-width="0.05" pointer-events="none"></rect>`:B}
         ${h?W`<circle cx=${e.x+e.w/2} cy=${e.y+e.h/2} r=${.22*Math.min(e.w,e.h)} class="pick" pointer-events="none"></circle>`:B}
         ${c?W`<rect x=${e.x+.025} y=${e.y+.025} width=${e.w-.05} height=${e.h-.05} class="hl" pointer-events="none"></rect>`:B}
-      </g>`}),h=[];for(const t of e.faces){const e=new Map;for(const s of t.cells){if(void 0===s.slot)continue;const t=e.get(s.slot)??{x:0,y:0,n:0};t.x+=s.x+s.w/2,t.y+=s.y+s.h/2,t.n++,e.set(s.slot,t)}for(const[t,s]of e)h.push(W`<text class="slot" x=${s.x/s.n} y=${s.y/s.n} pointer-events="none">${t}</text>`)}const d=e.faces.map((e,s)=>{const i=e.bbox,o=t.faces[s],r=i.x+i.w/2,a=i.y+i.h/2,l=e.slope?{up:0,right:90,down:180,left:270}[e.slope]:pt(e.azimuth+n);return W`<g class="facelabel" pointer-events="none">
+      </g>`}),d=[];for(const t of e.faces){const e=new Map;for(const s of t.cells){if(void 0===s.slot)continue;const t=e.get(s.slot)??{x:0,y:0,n:0};t.x+=s.x+s.w/2,t.y+=s.y+s.h/2,t.n++,e.set(s.slot,t)}const i=t.bbox,n=.38;for(const[o,r]of e){const e=r.x/r.n,a=r.y/r.n;if("none"===s)continue;if("center"===s||!t.slope){d.push(W`<text class="slot" x=${e} y=${a} pointer-events="none">${o}</text>`);continue}const l=t.cells.filter(t=>t.slot===o),c="down"===t.slope||"up"===t.slope,h=e=>"down"===t.slope?e.row:"up"===t.slope?-e.row:"right"===t.slope?e.col:-e.col,p=Math.max(...l.map(h)),u=l.filter(t=>h(t)===p),f=u.reduce((t,e)=>t+(c?e.x+e.w/2:e.y+e.h/2),0)/u.length,[$,m]="down"===t.slope?[f,i.y+i.h+n]:"up"===t.slope?[f,i.y-n]:"left"===t.slope?[i.x-n,f]:[i.x+i.w+n,f],g=this._selected===o;d.push(W`<text class="slot eave ${g?"sel":""}" x=${$} y=${m} @click=${()=>this._select(o)}>${o}</text>`)}}const p=e.faces.map((e,s)=>{const i=e.bbox,n=t.faces[s],r=i.x+i.w/2,a=i.y+i.h/2,l=e.slope?{up:0,right:90,down:180,left:270}[e.slope]:pt(e.azimuth+o);return W`<g class="facelabel" pointer-events="none">
         <g transform="translate(${r} ${a}) rotate(${l})">
           <path d="M0,-0.55 L0.28,-0.1 L0.1,-0.1 L0.1,0.45 L-0.1,0.45 L-0.1,-0.1 L-0.28,-0.1 Z" class="slopearrow"></path>
         </g>
         <text x=${r} y=${a+.95} class="fname">${e.name}</text>
-        <text x=${r} y=${a+1.35} class="fsub">${Math.round(e.azimuth)}° · ${e.tilt}° · ${zt(o.power)}</text>
-      </g>`}),p=e.bbox.x+e.bbox.w+s+1.1,u=e.bbox.y+1.2,f=W`<g transform="translate(${p} ${u}) rotate(${n})" class="compass">
+        <text x=${r} y=${a+1.35} class="fsub">${Math.round(e.azimuth)}° · ${e.tilt}° · ${zt(n.power)}</text>
+      </g>`}),u=e.bbox.x+e.bbox.w+i+1.1,f=e.bbox.y+1.2,$=W`<g transform="translate(${u} ${f}) rotate(${o})" class="compass">
       <circle r="0.85"></circle>
       <path d="M0,-0.75 L0.22,0 L0,0.12 L-0.22,0 Z" class="n"></path>
       <path d="M0,0.75 L0.22,0 L0,-0.12 L-0.22,0 Z" class="s"></path>
-      <text y="-0.95" transform="rotate(${-n} 0 -1.15)" x="0">N</text>
-    </g>`,$="power"===this._mode?this._legend(kt,"0",`${this._config.panel_wp??400} W/panel (√ scale)`):this._legend(At,"0 %","100 % of median");return F`<div class="roof">
-      <svg viewBox=${i.join(" ")} preserveAspectRatio="xMidYMid meet">
+      <text y="-0.95" transform="rotate(${-o} 0 -1.15)" x="0">N</text>
+    </g>`,m="power"===this._mode?this._legend(kt,"0",`${this._config.panel_wp??400} W/panel (√ scale)`):this._legend(At,"0 %","100 % of median");return F`<div class="roof">
+      <svg viewBox=${n.join(" ")} preserveAspectRatio="xMidYMid meet">
         <defs>
           <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stop-color="#fff" stop-opacity="0.14"></stop>
@@ -55,11 +55,11 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
             <rect width="0.06" height="0.18" fill="#9e9e9e" opacity="0.7"></rect>
           </pattern>
         </defs>
-        ${l}${c}${h}${this._config.face_labels?d:B}${f}
+        ${c}${h}${d}${this._config.face_labels?p:B}${$}
       </svg>
-      ${$}
+      ${m}
       ${this._renderPicked()}
-      ${void 0!==o?this._renderDetail(t,o):F`<div class="hint">Tap a panel to see its inverter · Shift+click marks a panel and copies its ID.</div>`}
+      ${void 0!==r?this._renderDetail(t,r):F`<div class="hint">Tap a panel to see its inverter · Shift+click marks a panel and copies its ID.</div>`}
     </div>`}_legend(t,e,s){const i=t.map(([t,e])=>`${e} ${100*t}%`).join(",");return F`<div class="legend">
       <span>${e}</span><span class="bar" style="background:linear-gradient(90deg,${i})"></span><span>${s}</span>
       <span class="sw" style="--c:${bt.offline}">offline</span>
@@ -297,6 +297,17 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
       stroke: #000;
       stroke-opacity: 0.5;
       stroke-width: 0.06px;
+    }
+    text.slot.eave {
+      fill: var(--secondary-text-color, #aaa);
+      fill-opacity: 1;
+      stroke: none;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    text.slot.eave.sel {
+      fill: var(--primary-text-color, #fff);
+      font-weight: 700;
     }
     .facelabel .slopearrow {
       fill: #fff;
@@ -620,4 +631,4 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
         grid-template-columns: 1fr 1fr;
       }
     }
-  `,customElements.get("roof-pv-card")||customElements.define("roof-pv-card",Rt),window.customCards=window.customCards||[],window.customCards.push({type:"roof-pv-card",name:"Roof PV Card",description:"Ennogie-style roof visualisation of a PV system with micro inverters",preview:!1,documentationURL:"https://github.com/MrJones4u/HA-card-ennogie-style-roof-visualisation"}),console.info("%c ROOF-PV-CARD %c 0.1.4 ","color:#fff;background:#1d5fa3;font-weight:700","color:#1d5fa3;background:#fff");
+  `,customElements.get("roof-pv-card")||customElements.define("roof-pv-card",Rt),window.customCards=window.customCards||[],window.customCards.push({type:"roof-pv-card",name:"Roof PV Card",description:"Ennogie-style roof visualisation of a PV system with micro inverters",preview:!1,documentationURL:"https://github.com/MrJones4u/HA-card-ennogie-style-roof-visualisation"}),console.info("%c ROOF-PV-CARD %c 0.1.5 ","color:#fff;background:#1d5fa3;font-weight:700","color:#1d5fa3;background:#fff");

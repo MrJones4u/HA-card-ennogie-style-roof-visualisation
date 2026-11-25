@@ -44,6 +44,7 @@ The card is configured in YAML (no visual editor yet). See [`examples/example.ya
 | `outline` | `panels` | `panels` = one outline around all panels, `faces` = one box per face, `none` |
 | `outline_margin` | `0.1` | Distance between panels and outline (m) |
 | `outline_merge` | `0.35` | Gaps up to twice this width (m) are bridged by the outline |
+| `slot_labels` | `eave` | Inverter numbers at the downhill edge of each face (`eave`), on the panels (`center`) or `none` |
 | `face_labels` | `false` | Show face name, orientation and slope arrow on the drawing |
 | `mode` | `power` | Initial colour mode, `power` or `relative` |
 | `show` | all | Sections and their order: `header`, `roof`, `sun`, `strings`, `inverters`, `inventory` |

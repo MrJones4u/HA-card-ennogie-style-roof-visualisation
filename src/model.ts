@@ -70,6 +70,8 @@ export interface CardConfig {
   outline_margin?: number;
   /** gaps up to 2 × this many metres between panels are bridged by the outline (default 0.35) */
   outline_merge?: number;
+  /** inverter numbers: at the eave edge of each face (default), in the centre of its panels, or none */
+  slot_labels?: 'eave' | 'center' | 'none';
   /** default colour mode */
   mode?: 'power' | 'relative';
   /** sections to show, in order */

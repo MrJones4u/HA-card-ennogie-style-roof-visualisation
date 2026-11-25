@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.1.4';
+const VERSION = '0.1.5';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -423,7 +423,8 @@ class RoofPvCard extends LitElement {
 
   private _renderRoof(snap: Snapshot) {
     const m = this._model!;
-    const pad = 0.5;
+    const labelMode = this._config!.slot_labels ?? 'eave';
+    const pad = labelMode === 'eave' ? 0.75 : 0.5;
     const compassW = 2.2;
     const vb = [m.bbox.x - pad, m.bbox.y - pad, m.bbox.w + 2 * pad + compassW, m.bbox.h + 2 * pad];
     const north = this._config!.north ?? 0;
@@ -477,8 +478,31 @@ class RoofPvCard extends LitElement {
         a.n++;
         acc.set(c.slot, a);
       }
+      const b = f.bbox;
+      const off = 0.38; // distance of the label from the face edge
       for (const [slot, a] of acc) {
-        labels.push(svg`<text class="slot" x=${a.x / a.n} y=${a.y / a.n} pointer-events="none">${slot}</text>`);
+        const cx = a.x / a.n;
+        const cy = a.y / a.n;
+        if (labelMode === 'none') continue;
+        if (labelMode === 'center' || !f.slope) {
+          labels.push(svg`<text class="slot" x=${cx} y=${cy} pointer-events="none">${slot}</text>`);
+          continue;
+        }
+        // eave = downhill edge, where the inverters sit; position along the edge from the
+        // inverter's panels in its row/column closest to the eave (ignores chains running across)
+        const own = f.cells.filter((c) => c.slot === slot);
+        const horiz = f.slope === 'down' || f.slope === 'up';
+        const key = (c: Cell) => (f.slope === 'down' ? c.row : f.slope === 'up' ? -c.row : f.slope === 'right' ? c.col : -c.col);
+        const best = Math.max(...own.map(key));
+        const edgeCells = own.filter((c) => key(c) === best);
+        const along = edgeCells.reduce((sum, c) => sum + (horiz ? c.x + c.w / 2 : c.y + c.h / 2), 0) / edgeCells.length;
+        const [x, y] =
+          f.slope === 'down' ? [along, b.y + b.h + off]
+          : f.slope === 'up' ? [along, b.y - off]
+          : f.slope === 'left' ? [b.x - off, along]
+          : [b.x + b.w + off, along];
+        const sel = this._selected === slot;
+        labels.push(svg`<text class="slot eave ${sel ? 'sel' : ''}" x=${x} y=${y} @click=${() => this._select(slot)}>${slot}</text>`);
       }
     }
 
@@ -1016,6 +1040,17 @@ class RoofPvCard extends LitElement {
       stroke: #000;
       stroke-opacity: 0.5;
       stroke-width: 0.06px;
+    }
+    text.slot.eave {
+      fill: var(--secondary-text-color, #aaa);
+      fill-opacity: 1;
+      stroke: none;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    text.slot.eave.sel {
+      fill: var(--primary-text-color, #fff);
+      font-weight: 700;
     }
     .facelabel .slopearrow {
       fill: #fff;
