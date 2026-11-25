@@ -81,6 +81,9 @@ export interface Cell {
   w: number;
   h: number;
   face: number;
+  /** 1-based row / column in the face map */
+  row: number;
+  col: number;
   slot?: number;
   input?: 0 | 1;
   dummy?: boolean;
@@ -154,7 +157,7 @@ export function buildModel(cfg: CardConfig): Model {
       maxCols = Math.max(maxCols, toks.length);
       toks.forEach((tok, c) => {
         if (tok === '.' || tok === '-') return;
-        const cell: Cell = { x: fx + c * pw, y: fy + r * ph, w: pw, h: ph, face: index };
+        const cell: Cell = { x: fx + c * pw, y: fy + r * ph, w: pw, h: ph, face: index, row: r + 1, col: c + 1 };
         if (tok.toLowerCase() === 'x') {
           cell.dummy = true;
         } else {

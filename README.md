@@ -8,6 +8,7 @@ A Home Assistant Lovelace card that draws your roof panel by panel and colours e
 - **Panel → inverter mapping**: tap a panel to highlight all panels of its inverter and see both inputs, W/panel, temperature, grid frequency, voltage, signal, online state and the replacement history of that slot.
 - **Status detection**: `offline` (no data in daylight), `no output` (< 10 % of the orientation median), `low output` (< 70 %), `night`. Night is never shown as a fault.
 - **Sun view**: sky dome with today's sun path, sunrise / sunset, current sun position and the roof drawn at its configured rotation. For each roof face: azimuth, tilt, current angle-of-incidence factor and actual production.
+- **Mark panels**: Shift (or Ctrl/Alt) + click marks a panel and copies an ID like `F1 R3 C17 · inv 3 in 1 · <serial>` (face, row and column in the face map) to the clipboard; several marked panels are listed and copied together.
 - **Strings**: power per AC string (e.g. per RCBO), phase totals and imbalance, optional breaker entity, warning when a whole string is down.
 - **Inverter table** with all values.
 - **Inventory check**: compares the inverters you configured with the inverter entities that exist in HA, so a swapped inverter that isn't mapped to a slot yet, or a mapped one that disappeared, shows up immediately.

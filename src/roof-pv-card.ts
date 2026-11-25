@@ -5,6 +5,7 @@ import {
   InverterKey,
   INVERTER_KEYS,
   Model,
+  Cell,
   SectionName,
   buildModel,
   inputKey,
@@ -12,7 +13,7 @@ import {
 } from './model';
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 
-const VERSION = '0.1.2';
+const VERSION = '0.1.3';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -156,6 +157,9 @@ class RoofPvCard extends LitElement {
     _hoverKey: { state: true },
     _tick: { state: true },
     _showAllInventory: { state: true },
+    _picked: { state: true },
+    _lastCell: { state: true },
+    _toast: { state: true },
   };
 
   hass?: Hass;
@@ -166,6 +170,10 @@ class RoofPvCard extends LitElement {
   private _hoverKey?: string;
   private _tick = 0;
   private _showAllInventory = false;
+  private _picked: string[] = [];
+  private _lastCell?: Cell;
+  private _toast?: string;
+  private _toastTimer?: number;
   private _watched: string[] = [];
   private _timer?: number;
   private _sunDayCache?: { key: string; day: SunDay };
@@ -427,8 +435,9 @@ class RoofPvCard extends LitElement {
       const k = inputKey(c.slot!, c.input!);
       const dim = sel !== undefined && sel !== c.slot;
       const hl = sel === c.slot || hoverKey === k;
+      const picked = this._picked.includes(this._cellId(c));
       const tip = `Inverter ${c.slot} · input ${c.input! + 1} · ${s?.panels ?? 0} panels\n${fmtW(s?.power)} · ${s?.wpp !== null && s?.wpp !== undefined ? Math.round(s.wpp) + ' W/panel' : '–'} · ${pct(s?.rel)} of median\n${STATUS_LABEL[status]}`;
-      return svg`<g class="cell ${dim ? 'dim' : ''}" @click=${() => this._select(c.slot!)}
+      return svg`<g class="cell ${dim ? 'dim' : ''}" @click=${(e: MouseEvent) => this._cellClick(e, c)}
           @mouseenter=${() => (this._hoverKey = k)} @mouseleave=${() => (this._hoverKey = undefined)}>
         <title>${tip}</title>
         <rect x=${c.x + 0.025} y=${c.y + 0.025} width=${c.w - 0.05} height=${c.h - 0.05} fill=${fill} class="panel"></rect>
@@ -439,6 +448,7 @@ class RoofPvCard extends LitElement {
         ${status === 'fault' || status === 'low'
           ? svg`<rect x=${c.x + 0.06} y=${c.y + 0.06} width=${c.w - 0.12} height=${c.h - 0.12} fill="none" stroke=${STATUS_COLOR[status]} stroke-width="0.05" pointer-events="none"></rect>`
           : nothing}
+        ${picked ? svg`<circle cx=${c.x + c.w / 2} cy=${c.y + c.h / 2} r=${Math.min(c.w, c.h) * 0.22} class="pick" pointer-events="none"></circle>` : nothing}
         ${hl ? svg`<rect x=${c.x + 0.025} y=${c.y + 0.025} width=${c.w - 0.05} height=${c.h - 0.05} class="hl" pointer-events="none"></rect>` : nothing}
       </g>`;
     });
@@ -507,7 +517,8 @@ class RoofPvCard extends LitElement {
         ${faces}${cells}${labels}${this._config!.face_labels ? faceLabels : nothing}${compass}
       </svg>
       ${legend}
-      ${sel !== undefined ? this._renderDetail(snap, sel) : html`<div class="hint">Tap a panel to see its inverter.</div>`}
+      ${this._renderPicked()}
+      ${sel !== undefined ? this._renderDetail(snap, sel) : html`<div class="hint">Tap a panel to see its inverter · Shift+click marks a panel and copies its ID.</div>`}
     </div>`;
   }
 
@@ -517,6 +528,71 @@ class RoofPvCard extends LitElement {
       <span>${lo}</span><span class="bar" style="background:linear-gradient(90deg,${grad})"></span><span>${hi}</span>
       <span class="sw" style="--c:${STATUS_COLOR.offline}">offline</span>
       <span class="sw" style="--c:${STATUS_COLOR.low}">low</span>
+    </div>`;
+  }
+
+  /** stable, human-readable panel id, e.g. "F1 R3 C17 · inv 3 in 1 · 724000012292" */
+  private _cellId(c: Cell): string {
+    const pos = `F${c.face + 1} R${c.row} C${c.col}`;
+    if (c.dummy || c.slot === undefined) return `${pos} · dummy`;
+    const inv = this._config!.inverters.find((i) => i.slot === c.slot);
+    return `${pos} · inv ${c.slot} in ${c.input! + 1}${inv ? ` · ${inv.serial}` : ''}`;
+  }
+
+  private _cellClick(e: MouseEvent, c: Cell) {
+    this._lastCell = c;
+    if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) {
+      const id = this._cellId(c);
+      if (this._picked.includes(id)) this._picked = this._picked.filter((p) => p !== id);
+      else this._picked = [...this._picked, id];
+      this._copy(this._picked.length > 1 ? this._picked.join('\n') : id, this._picked.length > 1 ? `${this._picked.length} panels copied` : `copied: ${id}`);
+      return;
+    }
+    if (c.slot !== undefined) this._select(c.slot);
+  }
+
+  private async _copy(text: string, msg: string) {
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      }
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok) {
+      // http:// (not a secure context): fall back to a hidden textarea
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        ok = document.execCommand('copy');
+      } catch (_) {
+        ok = false;
+      }
+      ta.remove();
+    }
+    this._toast = ok ? msg : `copy failed – select the text below`;
+    if (this._toastTimer) window.clearTimeout(this._toastTimer);
+    this._toastTimer = window.setTimeout(() => (this._toast = undefined), 2500);
+  }
+
+  private _renderPicked() {
+    if (!this._picked.length && !this._toast) return nothing;
+    return html`<div class="picked">
+      ${this._toast ? html`<div class="toast">${this._toast}</div>` : nothing}
+      ${this._picked.length
+        ? html`<div class="pickhead">
+              <b>Marked panels (${this._picked.length})</b>
+              <button @click=${() => this._copy(this._picked.join('\n'), `${this._picked.length} panels copied`)}>Copy all</button>
+              <button @click=${() => (this._picked = [])}>Clear</button>
+            </div>
+            <pre class="picklist">${this._picked.join('\n')}</pre>`
+        : nothing}
     </div>`;
   }
 
@@ -566,6 +642,10 @@ class RoofPvCard extends LitElement {
           ${this._val('Online', s.online === null ? '–' : s.online ? 'yes' : 'no', 'online', inv)}
         </div>
       </div>
+      ${this._lastCell && this._lastCell.slot === slot
+        ? html`<div class="small">Panel <span class="mono">${this._cellId(this._lastCell)}</span>
+            <button class="mini" @click=${() => this._copy(this._cellId(this._lastCell!), 'copied')}>Copy ID</button></div>`
+        : nothing}
       ${s.lastUpdate ? html`<div class="muted small">last data: ${s.lastUpdate}</div>` : nothing}
       ${inv.history?.length
         ? html`<div class="muted small">History: ${inv.history.map((h) => `${h.serial}${h.replaced ? ` (replaced ${h.replaced})` : ''}${h.note ? ` – ${h.note}` : ''}`).join(' → ')} → ${inv.serial}</div>`
@@ -983,6 +1063,48 @@ class RoofPvCard extends LitElement {
       border: 2px solid var(--c);
       margin: 0 3px 0 8px;
       vertical-align: -2px;
+    }
+    .pick {
+      fill: #fff;
+      stroke: #e91e63;
+      stroke-width: 0.06;
+    }
+    .picked {
+      margin: 6px 2px 0;
+      font-size: 0.85em;
+    }
+    .toast {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 10px;
+      background: var(--primary-color);
+      color: var(--text-primary-color, #fff);
+      margin-bottom: 4px;
+    }
+    .pickhead {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .pickhead button,
+    button.mini {
+      background: none;
+      border: 1px solid var(--divider-color, #555);
+      color: var(--primary-text-color);
+      border-radius: 10px;
+      padding: 1px 8px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.9em;
+    }
+    .picklist {
+      margin: 4px 0 0;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: var(--secondary-background-color, rgba(127, 127, 127, 0.1));
+      user-select: all;
+      white-space: pre-wrap;
+      font-size: 0.9em;
     }
     .hint {
       color: var(--secondary-text-color);
