@@ -12,7 +12,7 @@ import {
 } from './model';
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 
-const VERSION = '0.1.0';
+const VERSION = '0.1.1';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -192,6 +192,16 @@ class RoofPvCard extends LitElement {
 
   getCardSize() {
     return 12;
+  }
+
+  /** sections view (HA 2024.11+): full width by default */
+  getGridOptions() {
+    return { columns: 'full', min_columns: 6, rows: 'auto' };
+  }
+
+  /** sections view (HA 2024.8–2024.10) */
+  getLayoutOptions() {
+    return { grid_columns: 'full', grid_min_columns: 4 };
   }
 
   connectedCallback() {
