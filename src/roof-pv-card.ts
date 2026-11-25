@@ -12,7 +12,7 @@ import {
 } from './model';
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -504,7 +504,7 @@ class RoofPvCard extends LitElement {
             <rect width="0.06" height="0.18" fill="#9e9e9e" opacity="0.7"></rect>
           </pattern>
         </defs>
-        ${faces}${cells}${labels}${faceLabels}${compass}
+        ${faces}${cells}${labels}${this._config!.face_labels ? faceLabels : nothing}${compass}
       </svg>
       ${legend}
       ${sel !== undefined ? this._renderDetail(snap, sel) : html`<div class="hint">Tap a panel to see its inverter.</div>`}

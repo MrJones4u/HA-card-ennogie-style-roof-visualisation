@@ -9,9 +9,13 @@ export interface FaceConfig {
   /** explicit compass azimuth the face points to (overrides slope + north) */
   azimuth?: number;
   tilt?: number;
-  /** position of the top-left cell in the drawing, metres */
+  /** position of the top-left cell in the drawing, metres: [x, y] */
+  position?: [number, number];
+  /** same as position (note: in YAML a bare `y:` key can be read as boolean true – prefer `position`) */
   x?: number;
   y?: number;
+  left?: number;
+  top?: number;
   /** grid, one row per line, tokens separated by whitespace: `12a` = inverter slot 12 input 1, `12b` = input 2, `.` = nothing, `x` = dummy tile */
   map: string;
   panel_size?: [number, number];
@@ -58,6 +62,8 @@ export interface CardConfig {
   ignore_serials?: string[];
   total_power_entity?: string;
   today_energy_entity?: string;
+  /** show face name, orientation and slope arrow on the roof drawing (default false) */
+  face_labels?: boolean;
   /** default colour mode */
   mode?: 'power' | 'relative';
   /** sections to show, in order */
@@ -132,8 +138,10 @@ export function buildModel(cfg: CardConfig): Model {
 
   cfg.faces.forEach((f, index) => {
     const [pw, ph] = f.panel_size ?? [dw, dh];
-    const fx = f.x ?? 0;
-    const fy = f.y ?? 0;
+    const anyF = f as any;
+    const fx = Number(f.position?.[0] ?? f.left ?? f.x ?? 0);
+    // YAML 1.1 parsers turn a `y:` key into the boolean key `true`
+    const fy = Number(f.position?.[1] ?? f.top ?? f.y ?? anyF['true'] ?? 0);
     const rows = (f.map || '')
       .split('\n')
       .map((r) => r.trim())

@@ -40,6 +40,7 @@ The card is configured in YAML (no visual editor yet). See [`examples/example.ya
 | `ignore_serials` | `[]` | Serials to ignore in the inventory check (stale entities of removed units) |
 | `total_power_entity` | – | Optional total power entity (otherwise the inverter sum is shown) |
 | `today_energy_entity` | – | Optional energy-today entity |
+| `face_labels` | `false` | Show face name, orientation and slope arrow on the drawing |
 | `mode` | `power` | Initial colour mode, `power` or `relative` |
 | `show` | all | Sections and their order: `header`, `roof`, `sun`, `strings`, `inverters`, `inventory` |
 | `daylight_elevation` | `5` | Sun elevation (°) above which missing data counts as offline |
@@ -55,8 +56,7 @@ faces:
     slope: down      # downhill direction in the drawing: up | down | left | right
     tilt: 20         # degrees
     # azimuth: 180   # optional, overrides slope + north
-    x: 0             # top-left of the grid in the drawing, metres
-    y: 0
+    position: [0, 0] # top-left of the grid in the drawing, metres [x, y]
     map: |
       12a 12b 11a 11b .
       12a 12b 11a 11b x
@@ -67,6 +67,8 @@ Each line of `map` is one row of panels from top to bottom, each token one panel
 - `12a` – panel on inverter **slot 12, input 1** (`12b` = input 2; `121`/`122` also work)
 - `.` – no panel
 - `x` – dummy / inactive tile (drawn, but not counted)
+
+Use `position` rather than separate `x:` / `y:` keys: some YAML parsers read a bare `y:` key as the boolean `true`.
 
 The number of tokens per input is the number of panels in that chain, so W/panel comes out right even when chains have different lengths.
 

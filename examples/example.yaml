@@ -11,8 +11,7 @@ faces:
   - name: East
     slope: right        # downhill to the right of the drawing -> faces east (90°)
     tilt: 35
-    x: 4.0
-    y: 0
+    position: [4.0, 0]
     map: |
       1a 1b
       1a 1b
@@ -20,8 +19,7 @@ faces:
   - name: West
     slope: left         # -> faces west (270°)
     tilt: 35
-    x: 0
-    y: 0
+    position: [0, 0]
     map: |
       3a 3b
       3a 3b
