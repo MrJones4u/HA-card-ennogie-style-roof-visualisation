@@ -12,8 +12,9 @@ import {
   norm,
 } from './model';
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
+import { outlinePath } from './outline';
 
-const VERSION = '0.1.3';
+const VERSION = '0.1.4';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -177,6 +178,7 @@ class RoofPvCard extends LitElement {
   private _watched: string[] = [];
   private _timer?: number;
   private _sunDayCache?: { key: string; day: SunDay };
+  private _outline = '';
 
   static getStubConfig(): Partial<CardConfig> {
     return {
@@ -194,6 +196,10 @@ class RoofPvCard extends LitElement {
     if (!Array.isArray(config.inverters) || !config.inverters.length) throw new Error('roof-pv-card: "inverters" is required');
     this._config = config;
     this._model = buildModel(config);
+    this._outline =
+      (config.outline ?? 'panels') === 'panels'
+        ? outlinePath(this._model.cells, { margin: config.outline_margin ?? 0.1, merge: config.outline_merge ?? 0.35 })
+        : '';
     this._mode = config.mode ?? 'power';
     this._watched = this._collectWatched(config);
   }
@@ -424,10 +430,16 @@ class RoofPvCard extends LitElement {
     const sel = this._selected;
     const hoverKey = this._hoverKey;
 
-    const faces = m.faces.map((f) => {
-      const b = f.bbox;
-      return svg`<rect class="face" x=${b.x - 0.08} y=${b.y - 0.08} width=${b.w + 0.16} height=${b.h + 0.16} rx="0.08"></rect>`;
-    });
+    const outlineMode = this._config!.outline ?? 'panels';
+    const faces =
+      outlineMode === 'faces'
+        ? m.faces.map((f) => {
+            const b = f.bbox;
+            return svg`<rect class="face" x=${b.x - 0.08} y=${b.y - 0.08} width=${b.w + 0.16} height=${b.h + 0.16} rx="0.08"></rect>`;
+          })
+        : outlineMode === 'panels' && this._outline
+          ? svg`<path class="face" d=${this._outline} fill-rule="evenodd"></path>`
+          : nothing;
 
     const cells = m.cells.map((c) => {
       if (c.dummy) return svg`<rect class="dummy" x=${c.x + 0.02} y=${c.y + 0.02} width=${c.w - 0.04} height=${c.h - 0.04}></rect>`;
@@ -971,6 +983,7 @@ class RoofPvCard extends LitElement {
       fill: var(--roof);
       stroke: var(--roof-edge);
       stroke-width: 0.05;
+      stroke-linejoin: round;
     }
     .dummy {
       fill: #15191e;

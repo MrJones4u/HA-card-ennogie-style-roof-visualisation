@@ -41,6 +41,9 @@ The card is configured in YAML (no visual editor yet). See [`examples/example.ya
 | `ignore_serials` | `[]` | Serials to ignore in the inventory check (stale entities of removed units) |
 | `total_power_entity` | – | Optional total power entity (otherwise the inverter sum is shown) |
 | `today_energy_entity` | – | Optional energy-today entity |
+| `outline` | `panels` | `panels` = one outline around all panels, `faces` = one box per face, `none` |
+| `outline_margin` | `0.1` | Distance between panels and outline (m) |
+| `outline_merge` | `0.35` | Gaps up to twice this width (m) are bridged by the outline |
 | `face_labels` | `false` | Show face name, orientation and slope arrow on the drawing |
 | `mode` | `power` | Initial colour mode, `power` or `relative` |
 | `show` | all | Sections and their order: `header`, `roof`, `sun`, `strings`, `inverters`, `inventory` |

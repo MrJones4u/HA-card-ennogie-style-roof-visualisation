@@ -64,6 +64,12 @@ export interface CardConfig {
   today_energy_entity?: string;
   /** show face name, orientation and slope arrow on the roof drawing (default false) */
   face_labels?: boolean;
+  /** roof outline: one outline around all panels (default), one box per face, or none */
+  outline?: 'panels' | 'faces' | 'none';
+  /** distance between panels and outline in metres (default 0.1) */
+  outline_margin?: number;
+  /** gaps up to 2 × this many metres between panels are bridged by the outline (default 0.35) */
+  outline_merge?: number;
   /** default colour mode */
   mode?: 'power' | 'relative';
   /** sections to show, in order */
