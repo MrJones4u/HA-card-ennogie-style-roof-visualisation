@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>body{background:#111;color:#e1e1e1;font-family:Roboto,Arial,sans-serif;margin:0;padding:16px;
+--primary-text-color:#e1e1e1;--secondary-text-color:#9b9b9b;--primary-color:#03a9f4;--divider-color:#3a3a3a;--secondary-background-color:#202020;--card-background-color:#1c1c1c}
+ha-card{display:block;background:#1c1c1c;border-radius:12px;max-width:var(--w,1000px)}</style>
+<script>
+const RealDate = Date; const FIXED = new RealDate(new URLSearchParams(location.search).get('t') || '2026-11-25T11:10:00Z').getTime();
+class FakeDate extends RealDate { constructor(...a){ if(a.length) super(...a); else super(FIXED); } static now(){ return FIXED; } }
+window.Date = FakeDate;
+</script>
+<script src="data.js"></script>
+<script type="module">
+import '../dist/roof-pv-card.js';
+const el = document.createElement('roof-pv-card');
+const cfg = window.CFG; const q = new URLSearchParams(location.search);
+if (q.get('mode')) cfg.mode = q.get('mode');
+if (q.get('w')) document.body.style.setProperty('--w', q.get('w')+'px');
+el.setConfig(cfg);
+el.hass = { states: window.STATES, config: { latitude: 49.9597, longitude: 7.8702 } };
+document.body.appendChild(el);
+if (q.get('sel')) setTimeout(()=>{ el._selected = parseInt(q.get('sel')); }, 50);
+window.addEventListener('hass-more-info', e => console.log('more-info', e.detail.entityId));
+</script></head><body></body></html>

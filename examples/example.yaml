@@ -1,0 +1,45 @@
+# Minimal example: two roof faces (east/west gable), three dual-input micro inverters.
+type: custom:roof-pv-card
+title: Roof PV
+panel_wp: 410
+north: 0                # north points "up" in this drawing
+entity_pattern: "sensor.inverter_{serial}_{key}"
+panel_size: [1.13, 1.72]
+total_power_entity: sensor.ecu_current_power
+today_energy_entity: sensor.ecu_today_energy
+faces:
+  - name: East
+    slope: right        # downhill to the right of the drawing -> faces east (90°)
+    tilt: 35
+    x: 4.0
+    y: 0
+    map: |
+      1a 1b
+      1a 1b
+      2a 2b
+  - name: West
+    slope: left         # -> faces west (270°)
+    tilt: 35
+    x: 0
+    y: 0
+    map: |
+      3a 3b
+      3a 3b
+      .  x
+strings:
+  - id: S1
+    phase: L1
+    breaker: binary_sensor.pv_rcbo_1
+inverters:
+  - slot: 1
+    serial: "704000000001"
+    string: S1
+  - slot: 2
+    serial: "704000000002"
+    string: S1
+  - slot: 3
+    serial: "704000000003"
+    string: S1
+    prefix: sensor.renamed_inverter_704000000003   # entity ids deviate from the pattern
+    history:
+      - { serial: "704000000099", replaced: "2025-06-01" }
