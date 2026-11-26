@@ -4,7 +4,7 @@ A Home Assistant Lovelace card that draws your roof panel by panel and colours e
 
 ## Features
 
-- **Roof drawing**: every panel at its real position, coloured by **W per panel** (power mode) or **% of the median of panels with the same orientation** (relative mode, best for finding problems on cloudy days).
+- **Roof drawing**: every panel at its real position. Power mode: dark panels with a bar showing **0–100 % of panel peak power**, the bar coloured by how the panel does compared with panels of the same orientation. Relative mode: the whole panel coloured by **% of the median of panels with the same orientation** (best for finding problems on cloudy days).
 - **Panel → inverter mapping**: tap a panel to highlight all panels of its inverter and see both inputs, W/panel, temperature, grid frequency, voltage, signal, online state and the replacement history of that slot.
 - **Status detection**: `offline` (no data in daylight), `no output` (< 10 % of the orientation median), `low output` (< 70 %), `night`. Night is never shown as a fault.
 - **Sun view**: sky dome with today's sun path, sunrise / sunset, current sun position and the roof drawn at its configured rotation. For each roof face: azimuth, tilt, current angle-of-incidence factor and actual production.

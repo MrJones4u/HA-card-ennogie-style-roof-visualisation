@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.1.5';
+const VERSION = '0.1.6';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -90,6 +90,8 @@ const POWER_STOPS: [number, string][] = [
   [0.82, '#f2c14e'],
   [1, '#fff1b8'],
 ];
+const PANEL_BG = '#0e1a2b';
+const BAR_NEUTRAL = '#2fa8d5';
 const REL_STOPS: [number, string][] = [
   [0, '#7f1d1d'],
   [0.5, '#d32f2f'],
@@ -408,17 +410,24 @@ class RoofPvCard extends LitElement {
   }
 
   // ---------------------------------------------------------------- roof drawing
-  private _cellColor(snap: Snapshot, slot: number, input: 0 | 1): { fill: string; status: Status; s?: InputState } {
+  private _cellColor(
+    snap: Snapshot,
+    slot: number,
+    input: 0 | 1,
+  ): { fill: string; status: Status; s?: InputState; bar?: { frac: number; color: string } } {
     const st = snap.inv.get(slot);
     const s = st?.inputs[input];
     if (!st || !s) return { fill: '#3a3a3a', status: 'missing' };
     if (s.status === 'missing' || s.status === 'offline') return { fill: '#1a1a1a', status: s.status, s };
+    const relColor = snap.day && s.rel !== null ? scale(REL_STOPS, s.rel) : BAR_NEUTRAL;
     if (this._mode === 'relative') {
-      if (!snap.day || s.rel === null) return { fill: scale(POWER_STOPS, 0), status: s.status, s };
-      return { fill: scale(REL_STOPS, s.rel), status: s.status, s };
+      if (!snap.day || s.rel === null) return { fill: PANEL_BG, status: s.status, s };
+      return { fill: relColor, status: s.status, s };
     }
+    // power mode: dark panel with a bar 0..100 % of panel_wp, coloured by the relative value
     const wp = this._config!.panel_wp ?? 400;
-    return { fill: scale(POWER_STOPS, Math.sqrt(Math.max(0, s.wpp ?? 0) / wp)), status: s.status, s };
+    const frac = Math.max(0, Math.min(1, (s.wpp ?? 0) / wp));
+    return { fill: PANEL_BG, status: s.status, s, bar: { frac, color: relColor } };
   }
 
   private _renderRoof(snap: Snapshot) {
@@ -444,7 +453,9 @@ class RoofPvCard extends LitElement {
 
     const cells = m.cells.map((c) => {
       if (c.dummy) return svg`<rect class="dummy" x=${c.x + 0.02} y=${c.y + 0.02} width=${c.w - 0.04} height=${c.h - 0.04}></rect>`;
-      const { fill, status, s } = this._cellColor(snap, c.slot!, c.input!);
+      const { fill, status, s, bar } = this._cellColor(snap, c.slot!, c.input!);
+      const inset = 0.08;
+      const barH = bar ? (c.h - 2 * inset) * bar.frac : 0;
       const k = inputKey(c.slot!, c.input!);
       const dim = sel !== undefined && sel !== c.slot;
       const hl = sel === c.slot || hoverKey === k;
@@ -454,6 +465,9 @@ class RoofPvCard extends LitElement {
           @mouseenter=${() => (this._hoverKey = k)} @mouseleave=${() => (this._hoverKey = undefined)}>
         <title>${tip}</title>
         <rect x=${c.x + 0.025} y=${c.y + 0.025} width=${c.w - 0.05} height=${c.h - 0.05} fill=${fill} class="panel"></rect>
+        ${bar && barH > 0.005
+          ? svg`<rect x=${c.x + inset} y=${c.y + c.h - inset - barH} width=${c.w - 2 * inset} height=${barH} fill=${bar.color} rx="0.02" pointer-events="none"></rect>`
+          : nothing}
         <rect x=${c.x + 0.025} y=${c.y + 0.025} width=${c.w - 0.05} height=${c.h - 0.05} fill="url(#glass)" pointer-events="none"></rect>
         ${status === 'offline' || status === 'missing'
           ? svg`<rect x=${c.x + 0.025} y=${c.y + 0.025} width=${c.w - 0.05} height=${c.h - 0.05} fill="url(#hatch-${status})" pointer-events="none"></rect>`
@@ -532,7 +546,7 @@ class RoofPvCard extends LitElement {
     </g>`;
 
     const legend = this._mode === 'power'
-      ? this._legend(POWER_STOPS, '0', `${this._config!.panel_wp ?? 400} W/panel (√ scale)`)
+      ? this._legend(REL_STOPS, '0 %', '100 % of median', `bar height: 0–${this._config!.panel_wp ?? 400} W per panel · colour:`)
       : this._legend(REL_STOPS, '0 %', '100 % of median');
 
     return html`<div class="roof">
@@ -558,9 +572,10 @@ class RoofPvCard extends LitElement {
     </div>`;
   }
 
-  private _legend(stops: [number, string][], lo: string, hi: string) {
+  private _legend(stops: [number, string][], lo: string, hi: string, prefix?: string) {
     const grad = stops.map(([v, c]) => `${c} ${v * 100}%`).join(',');
     return html`<div class="legend">
+      ${prefix ? html`<span>${prefix}</span>` : nothing}
       <span>${lo}</span><span class="bar" style="background:linear-gradient(90deg,${grad})"></span><span>${hi}</span>
       <span class="sw" style="--c:${STATUS_COLOR.offline}">offline</span>
       <span class="sw" style="--c:${STATUS_COLOR.low}">low</span>
