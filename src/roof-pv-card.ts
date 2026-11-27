@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.3.4';
+const VERSION = '0.3.5';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -814,10 +814,26 @@ class RoofPvCard extends LitElement {
       </g>`;
     }
 
+    // yellow ticks at today's sunrise and sunset azimuths
+    const riseSet: SVGTemplateResult[] = [];
+    for (const d of [dayInfo.sunrise, dayInfo.sunset]) {
+      if (!d) continue;
+      const a = sunPosition(d, lat, lon).azimuth;
+      const [x1, y1] = pt(a, R * 1.012);
+      const [x2, y2] = pt(a, R * 0.93);
+      riseSet.push(svg`<line x1=${x1} y1=${y1} x2=${x2} y2=${y2} class="risesettick" style="stroke-width:${R * 0.008}"></line>`);
+    }
+    // between sunset and sunrise: small white dot at the sun's (virtual) position below the horizon
+    let virtual: SVGTemplateResult | typeof nothing = nothing;
+    if (this._scrubTime === undefined && snap.sun.elevation <= SUN_H0) {
+      const [vx, vy] = pt(snap.sun.azimuth, R);
+      virtual = svg`<circle cx=${vx} cy=${vy} r=${R * 0.012} class="virtualsun"></circle>`;
+    }
+
     return svg`<g class="compassring">
       <g pointer-events="none">
         <circle cx=${cx} cy=${cy} r=${R} class="dial" style="stroke-width:${R * 0.006}"></circle>
-        ${rays}${ticks}
+        ${rays}${ticks}${riseSet}${virtual}
       </g>
       ${labels}
       ${sun}
@@ -1672,6 +1688,14 @@ class RoofPvCard extends LitElement {
     .compassring .sunicon line {
       stroke: #ffd54f;
       stroke-linecap: round;
+    }
+    .compassring .risesettick {
+      stroke: #ffd54f;
+      stroke-linecap: round;
+    }
+    .compassring .virtualsun {
+      fill: #fff;
+      opacity: 0.85;
     }
     .compassring .rosegrab {
       cursor: grab;
