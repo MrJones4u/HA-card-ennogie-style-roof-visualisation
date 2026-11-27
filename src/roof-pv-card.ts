@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.3.8';
+const VERSION = '0.4.0';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -149,6 +149,11 @@ const median = (a: number[]) => {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 const fmtTime = (d?: Date) => (d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '–');
+const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const ddmm = (t: number) => {
+  const d = new Date(t);
+  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.`;
+};
 const hhmm = (t: number) => {
   const d = new Date(t);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -156,11 +161,11 @@ const hhmm = (t: number) => {
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** step-hold resampling of a state history to fixed intervals */
-function resample(rows: { t: number; p: number }[], step: number) {
+function resample(rows: { t: number; p: number }[], step: number, until = Date.now()) {
   if (!rows.length) return [];
   const out: { t: number; p: number }[] = [];
   let i = 0;
-  const end = Math.min(Date.now(), rows[rows.length - 1].t + 15 * 60000);
+  const end = Math.min(until, rows[rows.length - 1].t + 15 * 60000);
   for (let t = Math.ceil(rows[0].t / step) * step; t <= end; t += step) {
     while (i + 1 < rows.length && rows[i + 1].t <= t) i++;
     out.push({ t, p: rows[i].p });
@@ -233,6 +238,7 @@ class RoofPvCard extends LitElement {
     _loadError: { state: true },
     _scrubTime: { state: true },
     _viewRot: { state: true },
+    _day: { state: true },
     _selected: { state: true },
     _hoverKey: { state: true },
     _tick: { state: true },
@@ -259,6 +265,9 @@ class RoofPvCard extends LitElement {
   private _dragMode: 'sun' | 'rotate' = 'sun';
   /** display rotation of the compass view in degrees (per browser, not a config change) */
   private _viewRot = 0;
+  /** selected past day (local midnight, ms); undefined = today */
+  private _day?: number;
+  private _invHistKey = '';
   private _rotStart?: { pointer: number; rot: number };
   private _invHist = new Map<string, { t: number; v: number | null }[]>();
   private _invHistAt = 0;
@@ -408,9 +417,10 @@ class RoofPvCard extends LitElement {
     // raw values
     const raw = new Map<number, { p: [number | null, number | null]; missing: boolean; inv: InverterConfig }>();
     for (const inv of cfg.inverters) {
-      const i1 = this._entity(inv, 'power_ch_1');
-      const i2 = this._entity(inv, 'power_ch_2');
-      raw.set(inv.slot, { inv, missing: !hass.states[i1] && !hass.states[i2], p: [value(i1), value(i2)] });
+      const i1 = this._entityAt(inv, 'power_ch_1');
+      const i2 = this._entityAt(inv, 'power_ch_2');
+      const missing = this._isPast() ? false : !hass.states[i1] && !hass.states[i2];
+      raw.set(inv.slot, { inv, missing, p: [value(i1), value(i2)] });
     }
 
     // orientation reference: median W/panel of all inputs on faces with the same azimuth (±5°)
@@ -469,7 +479,7 @@ class RoofPvCard extends LitElement {
         online,
         inputs,
         power,
-        temperature: value(this._entity(inv, 'temperature')),
+        temperature: value(this._entityAt(inv, 'temperature')),
         frequency: at !== undefined ? null : num(st('frequency')?.state),
         voltage: at !== undefined ? null : num(st('voltage')?.state),
         signal: at !== undefined ? null : num(st('signal')?.state),
@@ -529,7 +539,9 @@ class RoofPvCard extends LitElement {
       <div class="title">${cfg.title ?? 'Roof PV'}</div>
       <div class="kpis">
         <div class="kpi power"><span class="v">${fmtW(total)}</span><span class="l">${this._scrubTime !== undefined ? `@${hhmm(this._scrubTime)}` : 'now'}${wp ? html` · ${pct(total / wp)} of ${(wp / 1000).toFixed(1)} kWp` : nothing}</span></div>
-        ${energy
+        ${this._isPast()
+          ? html`<div class="kpi energy"><span class="v">${this._dayEnergy() !== null ? `${this._dayEnergy()!.toFixed(1)} kWh` : '–'}</span><span class="l">${ddmm(this._dayStart().getTime())}</span></div>`
+          : energy
           ? html`<div class="kpi energy clickable" @click=${() => this._moreInfo(energy.entity_id)}>
               <span class="v">${energy.state} ${energy.attributes.unit_of_measurement ?? ''}</span><span class="l">today</span>
             </div>`
@@ -720,7 +732,8 @@ class RoofPvCard extends LitElement {
 
     const scrubbing = this._scrubTime !== undefined;
     return html`<div class="roof">
-      <div class="clock ${scrubbing ? 'past' : ''}">${scrubbing ? '@' : ''}${hhmm(this._scrubTime ?? Date.now())}</div>
+      <div class="clock ${scrubbing ? 'past' : ''}">${scrubbing ? '@' : ''}${this._isPast() ? `${ddmm(this._scrubTime!)} ` : ''}${hhmm(this._scrubTime ?? Date.now())}</div>
+      ${view === 'compass' ? this._renderDayBar() : nothing}
       <svg viewBox=${vb.join(' ')} preserveAspectRatio="xMidYMid meet"
         @pointermove=${(e: PointerEvent) => this._dragMove(e)}
         @pointerup=${(e: PointerEvent) => this._dragEnd(e)}
@@ -842,7 +855,7 @@ class RoofPvCard extends LitElement {
     // small white dot: where the sun is right now (real time, day and night)
     const nowSun = sunPosition(new Date(), lat, lon);
     const [vx, vy] = pt(nowSun.azimuth, R);
-    const virtual = svg`<circle cx=${vx} cy=${vy} r=${R * 0.012} class="virtualsun"></circle>`;
+    const virtual = this._isPast() ? nothing : svg`<circle cx=${vx} cy=${vy} r=${R * 0.012} class="virtualsun"></circle>`;
 
     return {
       base: svg`<g class="compassring" pointer-events="none">
@@ -975,6 +988,10 @@ class RoofPvCard extends LitElement {
       /* ignore */
     }
     this._stopReplay();
+    if (this._isPast()) {
+      this.requestUpdate();
+      return; // a past day stays where it was released
+    }
     // after 10 s run forward in 5-minute ticks back to real time (jump once the sun has set)
     this._scrubTimer = window.setTimeout(() => {
       this._replayTimer = window.setInterval(() => {
@@ -1004,7 +1021,7 @@ class RoofPvCard extends LitElement {
     const day = this._sunDay();
     if (!day.sunrise) return undefined;
     const t0 = Math.ceil(day.sunrise.getTime() / 60000) * 60000 + 60000; // first full minute after sunrise
-    const t1 = Math.min(Date.now(), day.sunset?.getTime() ?? Date.now());
+    const t1 = this._isPast() ? day.sunset?.getTime() ?? t0 : Math.min(Date.now(), day.sunset?.getTime() ?? Date.now());
     if (t1 <= t0) return undefined;
     const lat = this._lat(), lon = this._lon();
     const a0 = sunPosition(new Date(t0), lat, lon).azimuth;
@@ -1043,78 +1060,184 @@ class RoofPvCard extends LitElement {
     return rows[lo].v;
   }
 
-  /** today's history of all inverter power + temperature entities (for the time scrubbing) */
-  private _loadInverterHistory() {
-    if (!this.hass?.callWS || this._invHistLoading) return;
-    if (Date.now() - this._invHistAt < 2 * 60000 && this._invHist.size) return;
-    const ids: string[] = [];
-    for (const inv of this._config!.inverters) {
-      for (const k of ['power_ch_1', 'power_ch_2', 'temperature'] as InverterKey[]) ids.push(this._entity(inv, k));
+  // ---------------------------------------------------------------- selected day + data loading
+  private _dayStart(): Date {
+    if (this._day !== undefined) return new Date(this._day);
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  private _isPast() {
+    return this._day !== undefined;
+  }
+  private _dayEnd(): Date {
+    if (!this._isPast()) return new Date();
+    const d = this._dayStart();
+    d.setDate(d.getDate() + 1);
+    return d;
+  }
+
+  /** entity of an inverter on the selected day: replaced units use their old serial before the replacement date */
+  private _entityAt(inv: InverterConfig, key: InverterKey): string {
+    if (!this._isPast() || !inv.history?.length) return this._entity(inv, key);
+    const dayEnd = this._dayEnd().getTime();
+    for (const h of inv.history) {
+      const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(h.replaced ?? '');
+      if (!m) continue;
+      const when = new Date(+m[1], +m[2] - 1, m[3] ? +m[3] : 1).getTime();
+      if (when >= dayEnd) {
+        const p = this._config?.entity_pattern ?? 'sensor.inverter_{serial}_{key}';
+        return p.replace('{serial}', h.serial).replace('{key}', key);
+      }
     }
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    this._invHistLoading = true;
-    this.hass
-      .callWS<Record<string, { s: string; lu: number }[]>>({
+    return this._entity(inv, key);
+  }
+
+  /** states of entities over a period: recorder history, or hourly long-term statistics if history is gone */
+  private async _fetchSeries(ids: string[], start: Date, end: Date) {
+    const ws = this.hass!.callWS!.bind(this.hass);
+    const map = new Map<string, { t: number; v: number | null }[]>();
+    try {
+      const res = await ws<Record<string, { s: string; lu: number }[]>>({
         type: 'history/history_during_period',
         start_time: start.toISOString(),
-        end_time: new Date().toISOString(),
+        end_time: end.toISOString(),
         entity_ids: ids,
         minimal_response: true,
         no_attributes: true,
-      })
-      .then((res) => {
-        const map = new Map<string, { t: number; v: number | null }[]>();
-        for (const id of ids) {
-          let last = 0;
-          const rows = (res?.[id] ?? []).map((r) => {
-            last = r.lu ? r.lu * 1000 : last;
-            return { t: last, v: num(r.s) };
-          });
-          map.set(id, rows);
+      });
+      let filled = 0;
+      for (const id of ids) {
+        let last = 0;
+        const rows = (res?.[id] ?? []).map((r) => {
+          last = r.lu ? r.lu * 1000 : last;
+          return { t: last, v: num(r.s) };
+        });
+        if (rows.filter((r) => r.v !== null).length > 3) filled++;
+        map.set(id, rows);
+      }
+      if (filled >= Math.max(1, ids.length * 0.25)) return map;
+    } catch (_) {
+      /* fall through to statistics */
+    }
+    try {
+      const res = await ws<Record<string, { start: number | string; mean?: number | null }[]>>({
+        type: 'recorder/statistics_during_period',
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        statistic_ids: ids,
+        period: 'hour',
+        types: ['mean'],
+      });
+      for (const id of ids) {
+        const pts = (res?.[id] ?? [])
+          .filter((r) => r.mean !== null && r.mean !== undefined)
+          .map((r) => ({ t: (typeof r.start === 'number' ? r.start : Date.parse(r.start)) + 1800000, v: r.mean as number }));
+        const rows: { t: number; v: number | null }[] = [];
+        for (let i = 0; i < pts.length; i++) {
+          rows.push(pts[i]);
+          if (i + 1 < pts.length) {
+            for (let k = 1; k < 6; k++) {
+              rows.push({ t: pts[i].t + ((pts[i + 1].t - pts[i].t) * k) / 6, v: pts[i].v + ((pts[i + 1].v - pts[i].v) * k) / 6 });
+            }
+          }
         }
+        map.set(id, rows);
+      }
+    } catch (_) {
+      /* nothing available */
+    }
+    return map;
+  }
+
+  /** history of all inverter power + temperature entities for the selected day (time scrubbing) */
+  private _loadInverterHistory(force = false) {
+    if (!this.hass?.callWS || this._invHistLoading) return;
+    const key = this._dayStart().toDateString();
+    if (!force && key === this._invHistKey && (this._isPast() || Date.now() - this._invHistAt < 2 * 60000) && this._invHist.size) return;
+    const ids: string[] = [];
+    for (const inv of this._config!.inverters) {
+      for (const k of ['power_ch_1', 'power_ch_2', 'temperature'] as InverterKey[]) ids.push(this._entityAt(inv, k));
+    }
+    this._invHistLoading = true;
+    this._fetchSeries(ids, this._dayStart(), this._dayEnd())
+      .then((map) => {
+        if (key !== this._dayStart().toDateString()) return;
         this._invHist = map;
+        this._invHistKey = key;
         this._invHistAt = Date.now();
         this.requestUpdate();
-      })
-      .catch(() => {
-        /* history not available */
       })
       .finally(() => (this._invHistLoading = false));
   }
 
-  /** today's total power history (for the rays around the compass) */
+  /** total power history of the selected day (for the rays around the compass) */
   private _maybeLoadHistory(force = false) {
     const ent = this._config?.total_power_entity;
     if (!ent || !this.hass?.callWS) return;
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const key = `${ent}|${start.toDateString()}`;
-    if (!force && key === this._historyKey && Date.now() - this._historyAt < 5 * 60000) return;
+    const key = `${ent}|${this._dayStart().toDateString()}`;
+    if (!force && key === this._historyKey && (this._isPast() || Date.now() - this._historyAt < 5 * 60000)) return;
     this._historyKey = key;
     this._historyAt = Date.now();
-    this.hass
-      .callWS<Record<string, { s: string; lu: number }[]>>({
-        type: 'history/history_during_period',
-        start_time: start.toISOString(),
-        end_time: new Date().toISOString(),
-        entity_ids: [ent],
-        minimal_response: true,
-        no_attributes: true,
-      })
-      .then((res) => {
-        const rows = res?.[ent] ?? [];
-        const out: { t: number; p: number }[] = [];
-        for (const r of rows) {
-          const v = parseFloat(r.s);
-          if (isFinite(v)) out.push({ t: r.lu * 1000, p: v });
-        }
-        this._history = resample(out, 5 * 60000);
-        this.requestUpdate();
-      })
-      .catch(() => {
-        /* history not available – no rays */
-      });
+    this._fetchSeries([ent], this._dayStart(), this._dayEnd()).then((map) => {
+      if (key !== this._historyKey) return;
+      const out: { t: number; p: number }[] = [];
+      for (const r of map.get(ent) ?? []) if (r.v !== null) out.push({ t: r.t, p: r.v });
+      this._history = resample(out, 5 * 60000, this._dayEnd().getTime());
+      this.requestUpdate();
+    });
+  }
+
+  /** energy of the selected day from the total power history (kWh) */
+  private _dayEnergy(): number | null {
+    const h = this._history;
+    if (h.length < 2) return null;
+    let wh = 0;
+    for (let i = 1; i < h.length; i++) wh += ((h[i - 1].p + h[i].p) / 2) * ((h[i].t - h[i - 1].t) / 3600000);
+    return wh / 1000;
+  }
+
+  private _selectDay(value: string | undefined) {
+    this._stopReplay();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let day: number | undefined;
+    if (value) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+      if (m) day = new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+    }
+    if (day !== undefined && day >= today.getTime()) day = undefined;
+    this._day = day;
+    this._history = [];
+    this._invHist = new Map();
+    this._invHistKey = '';
+    this._historyKey = '';
+    if (day === undefined) {
+      this._scrubTime = undefined;
+    } else {
+      const sd = this._sunDay();
+      this._scrubTime = Math.round((sd.noon?.getTime() ?? day + 12 * 3600000) / 60000) * 60000;
+    }
+    this._maybeLoadHistory(true);
+    this._loadInverterHistory(true);
+  }
+
+  private _shiftDay(delta: number) {
+    const d = this._dayStart();
+    d.setDate(d.getDate() + delta);
+    this._selectDay(isoDate(d));
+  }
+
+  private _renderDayBar() {
+    const d = this._dayStart();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return html`<div class="daybar">
+      <button @click=${() => this._shiftDay(-1)} title="previous day">‹</button>
+      <input type="date" .value=${isoDate(d)} max=${isoDate(today)} @change=${(e: Event) => this._selectDay((e.target as HTMLInputElement).value)} />
+      <button @click=${() => this._shiftDay(1)} ?disabled=${!this._isPast()} title="next day">›</button>
+      ${this._isPast() ? html`<button class="today" @click=${() => this._selectDay(undefined)}>Today</button>` : nothing}
+    </div>`;
   }
 
   private _legend(stops: [number, string][], lo: string, hi: string, prefix?: string) {
@@ -1258,9 +1381,9 @@ class RoofPvCard extends LitElement {
     const cfg = this._config!;
     const lat = cfg.latitude ?? this.hass!.config.latitude;
     const lon = cfg.longitude ?? this.hass!.config.longitude;
-    const now = new Date();
-    const key = `${now.toDateString()}|${lat}|${lon}`;
-    if (this._sunDayCache?.key !== key) this._sunDayCache = { key, day: sunDay(now, lat, lon, 5) };
+    const ref = this._isPast() ? new Date(this._dayStart().getTime() + 12 * 3600000) : new Date();
+    const key = `${ref.toDateString()}|${lat}|${lon}`;
+    if (this._sunDayCache?.key !== key) this._sunDayCache = { key, day: sunDay(ref, lat, lon, 5) };
     return this._sunDayCache.day;
   }
 
@@ -1601,6 +1724,34 @@ class RoofPvCard extends LitElement {
       color: var(--secondary-text-color);
       pointer-events: none;
       z-index: 1;
+    }
+    .daybar {
+      position: absolute;
+      top: 8px;
+      left: 10px;
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      z-index: 1;
+    }
+    .daybar button,
+    .daybar input {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--divider-color, #444);
+      color: var(--primary-text-color);
+      border-radius: 8px;
+      font: inherit;
+      font-size: 0.85em;
+      padding: 2px 8px;
+      cursor: pointer;
+      color-scheme: dark;
+    }
+    .daybar button:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    .daybar .today {
+      border-color: var(--primary-color);
     }
     .clock.past {
       color: #ffd54f;

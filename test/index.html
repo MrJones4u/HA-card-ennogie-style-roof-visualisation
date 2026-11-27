@@ -7,7 +7,7 @@ const RealDate = Date; const FIXED = new RealDate(new URLSearchParams(location.s
 class FakeDate extends RealDate { constructor(...a){ if(a.length) super(...a); else super(FIXED); } static now(){ return FIXED; } }
 window.Date = FakeDate;
 </script>
-<script src="data.js"></script>
+<script src="data.js"></script><script src="jstats.js"></script>
 <script type="module">
 import '../dist/roof-pv-card.js';
 const el = document.createElement('roof-pv-card');
@@ -16,7 +16,11 @@ if (q.get('mode')) cfg.mode = q.get('mode');
 if (q.get('view')) cfg.view = q.get('view');
 if (q.get('w')) document.body.style.setProperty('--w', q.get('w')+'px');
 el.setConfig(cfg);
-el.hass = { states: window.STATES, config: { latitude: 49.9597, longitude: 7.8702 }, callWS: async (m) => { if (m.entity_ids.length === 1) return { [m.entity_ids[0]]: (window.PHIST||[]).filter(r => r.lu*1000 <= Date.now()) }; const o = {}; for (const id of m.entity_ids) o[id] = (window.IHIST[id]||[]).filter(r => r.lu*1000 <= Date.now()); return o; } };
+el.hass = { states: window.STATES, config: { latitude: 49.9597, longitude: 7.8702 }, callWS: async (m) => {
+    if (m.type === 'recorder/statistics_during_period') { const o = {}; for (const id of m.statistic_ids) o[id] = (window.JSTATS[id]||[]).filter(r => r.start >= Date.parse(m.start_time) && r.start < Date.parse(m.end_time)); return o; }
+    const st = Date.parse(m.start_time), en = Math.min(Date.parse(m.end_time), Date.now());
+    if (m.entity_ids.length === 1) return { [m.entity_ids[0]]: (window.PHIST||[]).filter(r => r.lu*1000 >= st && r.lu*1000 <= en) };
+    const o = {}; for (const id of m.entity_ids) o[id] = (window.IHIST[id]||[]).filter(r => r.lu*1000 >= st && r.lu*1000 <= en); return o; } };
 document.body.appendChild(el);
 if (q.get('sel')) setTimeout(()=>{ el._selected = parseInt(q.get('sel')); }, 50);
 window.addEventListener('hass-more-info', e => console.log('more-info', e.detail.entityId));
