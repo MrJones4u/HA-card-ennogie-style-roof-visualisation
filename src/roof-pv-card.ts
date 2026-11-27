@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.3.2';
+const VERSION = '0.3.3';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -784,7 +784,7 @@ class RoofPvCard extends LitElement {
     // the sun on the circle (draggable); after sunset a faint grab point at the sunset position
     let sun: SVGTemplateResult | typeof nothing = nothing;
     const r = R * 0.028;
-    const up = snap.sun.elevation > SUN_H0;
+    const up = snap.sun.elevation > SUN_H0 || this._scrubTime !== undefined;
     const dayInfo = this._sunDay();
     const restAz = up ? snap.sun.azimuth : dayInfo.sunset && Date.now() > dayInfo.sunset.getTime() ? sunPosition(dayInfo.sunset, lat, lon).azimuth : undefined;
     if (restAz !== undefined) {
@@ -837,7 +837,7 @@ class RoofPvCard extends LitElement {
     const drawAngle = (Math.atan2(p[0] - cx, -(p[1] - cy)) * 180) / Math.PI; // clockwise from up
     const az = norm(drawAngle - north);
     const t = this._timeForAzimuth(az);
-    if (t !== undefined) this._scrubTime = Math.round(t / 60000) * 60000;
+    if (t !== undefined) this._scrubTime = Math.ceil(t / 60000) * 60000;
   }
 
   private _dragEnd(e: PointerEvent) {
@@ -877,10 +877,22 @@ class RoofPvCard extends LitElement {
   private _timeForAzimuth(az: number): number | undefined {
     const day = this._sunDay();
     if (!day.sunrise) return undefined;
-    const t0 = day.sunrise.getTime();
+    const t0 = Math.ceil(day.sunrise.getTime() / 60000) * 60000 + 60000; // first full minute after sunrise
     const t1 = Math.min(Date.now(), day.sunset?.getTime() ?? Date.now());
     if (t1 <= t0) return undefined;
     const lat = this._lat(), lon = this._lon();
+    const a0 = sunPosition(new Date(t0), lat, lon).azimuth;
+    const a1 = sunPosition(new Date(t1), lat, lon).azimuth;
+    const span = norm(a1 - a0);
+    const off = norm(az - a0);
+    if (off > span) {
+      // pointer outside the arc: stay at the end it is closer to (prefer the side we came from)
+      const toStart = 360 - off;
+      const toEnd = off - span;
+      const prev = this._scrubTime;
+      if (prev !== undefined && Math.abs(toStart - toEnd) < 60) return prev - t0 < t1 - prev ? t0 : t1;
+      return toStart < toEnd ? t0 : t1;
+    }
     const steps = 240;
     let best = t0, bestD = Infinity;
     for (let i = 0; i <= steps; i++) {
@@ -1388,12 +1400,19 @@ class RoofPvCard extends LitElement {
       width: 6.5em;
     }
     .kpi.status {
-      width: 15em;
+      width: 17em;
     }
     .kpi .status-row {
-      display: block;
-      height: 1.6em;
-      line-height: 1.6em;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      height: 1.75em;
+      font-size: 1em;
+    }
+    .kpi .status-row .chip {
+      margin-right: 0;
+      line-height: 1.35;
+      flex: 0 0 auto;
     }
     .kpi .v {
       font-size: 1.15em;
