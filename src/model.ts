@@ -76,6 +76,8 @@ export interface CardConfig {
   slot_labels?: 'eave' | 'center' | 'none';
   /** roof view: inside a compass circle (default) or plain plan */
   view?: 'compass' | 'plan';
+  /** compass view: draw today's sun path (elevation as distance from the circle) */
+  sun_path?: boolean;
   /** default colour mode */
   mode?: 'power' | 'relative';
   /** sections to show, in order */

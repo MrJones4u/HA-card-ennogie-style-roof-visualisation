@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.3.6';
+const VERSION = '0.3.7';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -737,6 +737,7 @@ class RoofPvCard extends LitElement {
         </defs>
         <g transform=${rot && this._dial ? `rotate(${rot} ${this._dial.cx} ${this._dial.cy})` : ''}>
           ${ring}${faces}${cells}${labels}${this._config!.face_labels ? faceLabels : nothing}
+          ${view === 'compass' ? this._sunPathOverlay(snap) : nothing}
         </g>${compass}
       </svg>
       ${legend}
@@ -837,6 +838,25 @@ class RoofPvCard extends LitElement {
       </g>
       ${labels}
       ${sun}
+    </g>`;
+  }
+
+  /** today's sun path inside the compass circle (radius = 90° - elevation), drawn above the roof */
+  private _sunPathOverlay(snap: Snapshot): SVGTemplateResult | typeof nothing {
+    if (!this._config?.sun_path || !this._dial) return nothing;
+    const { cx, cy, R, north } = this._dial;
+    const day = this._sunDay();
+    const pos = (az: number, el: number) => {
+      const a = ((az + north) * Math.PI) / 180;
+      const r = (R * (90 - Math.max(-1, el))) / 90;
+      return [cx + Math.sin(a) * r, cy - Math.cos(a) * r];
+    };
+    const pts = day.path.filter((p) => p.elevation >= -1).map((p) => pos(p.azimuth, p.elevation).map((v) => v.toFixed(3)).join(',')).join(' ');
+    if (!pts) return nothing;
+    const dot = snap.sun.elevation > SUN_H0 || this._scrubTime !== undefined ? pos(snap.sun.azimuth, snap.sun.elevation) : null;
+    return svg`<g class="sunpathmain" pointer-events="none">
+      <polyline points=${pts} style="stroke-width:${R * 0.006};stroke-dasharray:${R * 0.03} ${R * 0.02}"></polyline>
+      ${dot ? svg`<circle cx=${dot[0]} cy=${dot[1]} r=${R * 0.018}></circle>` : nothing}
     </g>`;
   }
 
@@ -1688,6 +1708,16 @@ class RoofPvCard extends LitElement {
     .compassring .sunicon line {
       stroke: #ffd54f;
       stroke-linecap: round;
+    }
+    .sunpathmain polyline {
+      fill: none;
+      stroke: #f2c14e;
+      opacity: 0.85;
+    }
+    .sunpathmain circle {
+      fill: #ffd54f;
+      stroke: #fff;
+      stroke-width: 0.03;
     }
     .compassring .risesettick {
       stroke: #ffd54f;

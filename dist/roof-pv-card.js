@@ -66,6 +66,7 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
         </defs>
         <g transform=${r&&this._dial?`rotate(${r} ${this._dial.cx} ${this._dial.cy})`:""}>
           ${l}${p}${u}${f}${this._config.face_labels?g:K}
+          ${"compass"===o?this._sunPathOverlay(t):K}
         </g>${$}
       </svg>
       ${v}
@@ -84,6 +85,9 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
       </g>
       ${a}
       ${m}
+    </g>`}_sunPathOverlay(t){if(!this._config?.sun_path||!this._dial)return K;const{cx:e,cy:s,R:i,north:n}=this._dial,o=this._sunDay(),r=(t,o)=>{const r=(t+n)*Math.PI/180,a=i*(90-Math.max(-1,o))/90;return[e+Math.sin(r)*a,s-Math.cos(r)*a]},a=o.path.filter(t=>t.elevation>=-1).map(t=>r(t.azimuth,t.elevation).map(t=>t.toFixed(3)).join(",")).join(" ");if(!a)return K;const l=t.sun.elevation>Mt||void 0!==this._scrubTime?r(t.sun.azimuth,t.sun.elevation):null;return W`<g class="sunpathmain" pointer-events="none">
+      <polyline points=${a} style="stroke-width:${.006*i};stroke-dasharray:${.03*i} ${.02*i}"></polyline>
+      ${l?W`<circle cx=${l[0]} cy=${l[1]} r=${.018*i}></circle>`:K}
     </g>`}_rotKey(){return`roof-pv-card:rotation:${this._config?.config_url??this._config?.title??"default"}`}_loadRot(){try{return parseFloat(window.localStorage.getItem(this._rotKey())??"0")||0}catch(t){return 0}}_saveRot(){try{window.localStorage.setItem(this._rotKey(),String(Math.round(10*this._viewRot)/10))}catch(t){}}_pointerAngle(t){const e=this._svgPoint(t);if(e&&this._dial)return 180*Math.atan2(e[0]-this._dial.cx,-(e[1]-this._dial.cy))/Math.PI}_rotateStart(t){t.preventDefault(),t.stopPropagation();const e=this._pointerAngle(t);void 0!==e&&(this._dragMode="rotate",this._dragging=!0,this._rotStart={pointer:e,rot:this._viewRot},this.shadowRoot?.querySelector(".roof svg")?.setPointerCapture(t.pointerId))}_resetRotation(t){t.stopPropagation(),this._viewRot=0,this._saveRot()}_svgPoint(t){const e=this.shadowRoot?.querySelector(".roof svg"),s=e?.getScreenCTM();if(!e||!s)return;const i=new DOMPoint(t.clientX,t.clientY).matrixTransform(s.inverse());return[i.x,i.y]}_dragStart(t){t.preventDefault(),t.stopPropagation(),this._stopReplay(),this._dragMode="sun",this._dragging=!0,this.shadowRoot?.querySelector(".roof svg")?.setPointerCapture(t.pointerId),this._loadInverterHistory(),this._dragMove(t)}_dragMove(t){if(!this._dragging||!this._dial)return;if("rotate"===this._dragMode){const e=this._pointerAngle(t);if(void 0===e||!this._rotStart)return;let s=this._rotStart.rot+(e-this._rotStart.pointer);s=(s%360+540)%360-180;const i=(-this._dial.north%360+540)%360-180;for(const t of[0,i])Math.abs(s-t)<3&&(s=t);return void(this._viewRot=s)}const e=this._svgPoint(t);if(!e)return;const{cx:s,cy:i,north:n}=this._dial,o=180*Math.atan2(e[0]-s,-(e[1]-i))/Math.PI-this._viewRot,r=pt(o-n),a=this._timeForAzimuth(r);void 0!==a&&(this._scrubTime=6e4*Math.ceil(a/6e4))}_dragEnd(t){if(this._dragging){if(this._dragging=!1,"rotate"===this._dragMode){try{this.shadowRoot?.querySelector(".roof svg")?.releasePointerCapture(t.pointerId)}catch(t){}return this._dragMode="sun",void this._saveRot()}try{this.shadowRoot?.querySelector(".roof svg")?.releasePointerCapture(t.pointerId)}catch(t){}this._stopReplay(),this._scrubTimer=window.setTimeout(()=>{this._replayTimer=window.setInterval(()=>{const t=Date.now(),e=this._sunDay().sunset?.getTime(),s=(this._scrubTime??t)+3e5;s>=t||void 0!==e&&s>=e?(this._stopReplay(),this._scrubTime=void 0):this._scrubTime=s},150)},1e4),this.requestUpdate()}}_stopReplay(){this._scrubTimer&&window.clearTimeout(this._scrubTimer),this._replayTimer&&window.clearInterval(this._replayTimer),this._scrubTimer=void 0,this._replayTimer=void 0}_timeForAzimuth(t){const e=this._sunDay();if(!e.sunrise)return;const s=6e4*Math.ceil(e.sunrise.getTime()/6e4)+6e4,i=Math.min(Date.now(),e.sunset?.getTime()??Date.now());if(i<=s)return;const n=this._lat(),o=this._lon(),r=_t(new Date(s),n,o).azimuth,a=_t(new Date(i),n,o).azimuth,l=pt(a-r),c=pt(t-r);if(c>l){const t=360-c,e=c-l,n=this._scrubTime;return void 0!==n&&Math.abs(t-e)<60?n-s<i-n?s:i:t<e?s:i}let h=s,d=1/0;for(let e=0;e<=240;e++){const r=s+(i-s)*e/240,a=_t(new Date(r),n,o).azimuth,l=Math.abs((a-t+540)%360-180);l<d&&(d=l,h=r)}return h}_histVal(t,e){const s=this._invHist.get(t);if(!s||!s.length||s[0].t>e)return null;let i=0,n=s.length-1;for(;i<n;){const t=i+n+1>>1;s[t].t<=e?i=t:n=t-1}return s[i].v}_loadInverterHistory(){if(!this.hass?.callWS||this._invHistLoading)return;if(Date.now()-this._invHistAt<12e4&&this._invHist.size)return;const t=[];for(const e of this._config.inverters)for(const s of["power_ch_1","power_ch_2","temperature"])t.push(this._entity(e,s));const e=new Date;e.setHours(0,0,0,0),this._invHistLoading=!0,this.hass.callWS({type:"history/history_during_period",start_time:e.toISOString(),end_time:(new Date).toISOString(),entity_ids:t,minimal_response:!0,no_attributes:!0}).then(e=>{const s=new Map;for(const i of t){let t=0;const n=(e?.[i]??[]).map(e=>(t=e.lu?1e3*e.lu:t,{t:t,v:zt(e.s)}));s.set(i,n)}this._invHist=s,this._invHistAt=Date.now(),this.requestUpdate()}).catch(()=>{}).finally(()=>this._invHistLoading=!1)}_maybeLoadHistory(t=!1){const e=this._config?.total_power_entity;if(!e||!this.hass?.callWS)return;const s=new Date;s.setHours(0,0,0,0);const i=`${e}|${s.toDateString()}`;!t&&i===this._historyKey&&Date.now()-this._historyAt<3e5||(this._historyKey=i,this._historyAt=Date.now(),this.hass.callWS({type:"history/history_during_period",start_time:s.toISOString(),end_time:(new Date).toISOString(),entity_ids:[e],minimal_response:!0,no_attributes:!0}).then(t=>{const s=t?.[e]??[],i=[];for(const t of s){const e=parseFloat(t.s);isFinite(e)&&i.push({t:1e3*t.lu,p:e})}this._history=function(t,e){if(!t.length)return[];const s=[];let i=0;const n=Math.min(Date.now(),t[t.length-1].t+9e5);for(let o=Math.ceil(t[0].t/e)*e;o<=n;o+=e){for(;i+1<t.length&&t[i+1].t<=o;)i++;s.push({t:o,p:t[i].p})}return s}(i,3e5),this.requestUpdate()}).catch(()=>{}))}_legend(t,e,s,i){const n=t.map(([t,e])=>`${e} ${100*t}%`).join(",");return q`<div class="legend">
       ${i?q`<span>${i}</span>`:K}
       <span>${e}</span><span class="bar" style="background:linear-gradient(90deg,${n})"></span><span>${s}</span>
@@ -442,6 +446,16 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
       stroke: #ffd54f;
       stroke-linecap: round;
     }
+    .sunpathmain polyline {
+      fill: none;
+      stroke: #f2c14e;
+      opacity: 0.85;
+    }
+    .sunpathmain circle {
+      fill: #ffd54f;
+      stroke: #fff;
+      stroke-width: 0.03;
+    }
     .compassring .risesettick {
       stroke: #ffd54f;
       stroke-linecap: round;
@@ -776,4 +790,4 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
         grid-template-columns: 1fr 1fr;
       }
     }
-  `,customElements.get("roof-pv-card")||customElements.define("roof-pv-card",jt),window.customCards=window.customCards||[],window.customCards.push({type:"roof-pv-card",name:"Roof PV Card",description:"Ennogie-style roof visualisation of a PV system with micro inverters",preview:!1,documentationURL:"https://github.com/MrJones4u/HA-card-ennogie-style-roof-visualisation"}),console.info("%c ROOF-PV-CARD %c 0.3.6 ","color:#fff;background:#1d5fa3;font-weight:700","color:#1d5fa3;background:#fff");
+  `,customElements.get("roof-pv-card")||customElements.define("roof-pv-card",jt),window.customCards=window.customCards||[],window.customCards.push({type:"roof-pv-card",name:"Roof PV Card",description:"Ennogie-style roof visualisation of a PV system with micro inverters",preview:!1,documentationURL:"https://github.com/MrJones4u/HA-card-ennogie-style-roof-visualisation"}),console.info("%c ROOF-PV-CARD %c 0.3.7 ","color:#fff;background:#1d5fa3;font-weight:700","color:#1d5fa3;background:#fff");
