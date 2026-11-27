@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.3.7';
+const VERSION = '0.3.8';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -589,12 +589,15 @@ class RoofPvCard extends LitElement {
     // both views use a square drawing area
     let vb: number[];
     let ring: SVGTemplateResult | typeof nothing = nothing;
+    let ringTop: SVGTemplateResult | typeof nothing = nothing;
     if (view === 'compass' && this._circle) {
       const { cx: ccx, cy: ccy, r: rc } = this._circle;
       const R = rc / 0.885; // circle just outside the direction labels, which sit just outside the roof
       const half = R * 1.32; // outer band: power rays + margin
       vb = [ccx - half, ccy - half, 2 * half, 2 * half];
-      ring = this._compassRing(ccx, ccy, R, north, snap);
+      const cr = this._compassRing(ccx, ccy, R, north, snap);
+      ring = cr.base;
+      ringTop = cr.top;
       this._dial = { cx: ccx, cy: ccy, R, north };
     } else {
       const w = m.bbox.w + 2 * pad + compassW;
@@ -738,6 +741,7 @@ class RoofPvCard extends LitElement {
         <g transform=${rot && this._dial ? `rotate(${rot} ${this._dial.cx} ${this._dial.cy})` : ''}>
           ${ring}${faces}${cells}${labels}${this._config!.face_labels ? faceLabels : nothing}
           ${view === 'compass' ? this._sunPathOverlay(snap) : nothing}
+          ${ringTop}
         </g>${compass}
       </svg>
       ${legend}
@@ -800,9 +804,19 @@ class RoofPvCard extends LitElement {
     const r = R * 0.028;
     const up = snap.sun.elevation > SUN_H0 || this._scrubTime !== undefined;
     const dayInfo = this._sunDay();
-    const restAz = up ? snap.sun.azimuth : dayInfo.sunset && Date.now() > dayInfo.sunset.getTime() ? sunPosition(dayInfo.sunset, lat, lon).azimuth : undefined;
-    if (restAz !== undefined) {
-      const [sx, sy] = pt(restAz, R);
+    const onPath = !!this._config!.sun_path;
+    const sunsetPos = dayInfo.sunset && Date.now() > dayInfo.sunset.getTime() ? sunPosition(dayInfo.sunset, lat, lon) : undefined;
+    const rest = up ? snap.sun : sunsetPos;
+    // with sun_path the sun sits on its path (distance from the circle = elevation), otherwise on the circle
+    const elR = (el: number) => (onPath ? (R * (90 - Math.max(-1, el))) / 90 : R);
+    let marker: SVGTemplateResult | typeof nothing = nothing;
+    if (rest) {
+      const [sx, sy] = pt(rest.azimuth, elR(rest.elevation));
+      if (onPath && up) {
+        // small yellow dot on the circle at the sun's azimuth
+        const [mx, my] = pt(rest.azimuth, R);
+        marker = svg`<circle cx=${mx} cy=${my} r=${R * 0.014} class="sunmarker"></circle>`;
+      }
       const rayEls = up
         ? [0, 45, 90, 135, 180, 225, 270, 315].map((a) => {
             const rad = (a * Math.PI) / 180;
@@ -825,20 +839,18 @@ class RoofPvCard extends LitElement {
       riseSet.push(svg`<line x1=${x1} y1=${y1} x2=${x2} y2=${y2} class="risesettick" style="stroke-width:${R * 0.008}"></line>`);
     }
     // between sunset and sunrise: small white dot at the sun's (virtual) position below the horizon
-    let virtual: SVGTemplateResult | typeof nothing = nothing;
-    if (this._scrubTime === undefined && snap.sun.elevation <= SUN_H0) {
-      const [vx, vy] = pt(snap.sun.azimuth, R);
-      virtual = svg`<circle cx=${vx} cy=${vy} r=${R * 0.012} class="virtualsun"></circle>`;
-    }
+    // small white dot: where the sun is right now (real time, day and night)
+    const nowSun = sunPosition(new Date(), lat, lon);
+    const [vx, vy] = pt(nowSun.azimuth, R);
+    const virtual = svg`<circle cx=${vx} cy=${vy} r=${R * 0.012} class="virtualsun"></circle>`;
 
-    return svg`<g class="compassring">
-      <g pointer-events="none">
+    return {
+      base: svg`<g class="compassring" pointer-events="none">
         <circle cx=${cx} cy=${cy} r=${R} class="dial" style="stroke-width:${R * 0.006}"></circle>
-        ${rays}${ticks}${riseSet}${virtual}
-      </g>
-      ${labels}
-      ${sun}
-    </g>`;
+        ${rays}${ticks}${riseSet}${virtual}${marker}
+      </g>`,
+      top: svg`<g class="compassring">${labels}${sun}</g>`,
+    };
   }
 
   /** today's sun path inside the compass circle (radius = 90° - elevation), drawn above the roof */
@@ -853,10 +865,9 @@ class RoofPvCard extends LitElement {
     };
     const pts = day.path.filter((p) => p.elevation >= -1).map((p) => pos(p.azimuth, p.elevation).map((v) => v.toFixed(3)).join(',')).join(' ');
     if (!pts) return nothing;
-    const dot = snap.sun.elevation > SUN_H0 || this._scrubTime !== undefined ? pos(snap.sun.azimuth, snap.sun.elevation) : null;
+    void snap;
     return svg`<g class="sunpathmain" pointer-events="none">
       <polyline points=${pts} style="stroke-width:${R * 0.006};stroke-dasharray:${R * 0.03} ${R * 0.02}"></polyline>
-      ${dot ? svg`<circle cx=${dot[0]} cy=${dot[1]} r=${R * 0.018}></circle>` : nothing}
     </g>`;
   }
 
@@ -1722,6 +1733,9 @@ class RoofPvCard extends LitElement {
     .compassring .risesettick {
       stroke: #ffd54f;
       stroke-linecap: round;
+    }
+    .compassring .sunmarker {
+      fill: #ffd54f;
     }
     .compassring .virtualsun {
       fill: #fff;
