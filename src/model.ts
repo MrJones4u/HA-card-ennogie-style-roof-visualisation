@@ -72,6 +72,8 @@ export interface CardConfig {
   outline_merge?: number;
   /** inverter numbers: at the eave edge of each face (default), in the centre of its panels, or none */
   slot_labels?: 'eave' | 'center' | 'none';
+  /** roof view: inside a compass circle (default) or plain plan */
+  view?: 'compass' | 'plan';
   /** default colour mode */
   mode?: 'power' | 'relative';
   /** sections to show, in order */

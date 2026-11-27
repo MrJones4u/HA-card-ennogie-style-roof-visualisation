@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.1.7';
+const VERSION = '0.2.0';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -148,6 +148,30 @@ const median = (a: number[]) => {
 const fmtTime = (d?: Date) => (d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '–');
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** approximate smallest circle around all cells (each grown by `pad` metres) */
+function enclosingCircle(cells: { x: number; y: number; w: number; h: number }[], pad: number) {
+  const pts: [number, number][] = [];
+  for (const c of cells) {
+    pts.push([c.x - pad, c.y - pad], [c.x + c.w + pad, c.y - pad], [c.x - pad, c.y + c.h + pad], [c.x + c.w + pad, c.y + c.h + pad]);
+  }
+  if (!pts.length) return undefined;
+  let cx = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+  let cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+  // Badoiu-Clarkson iteration
+  for (let i = 1; i <= 2000; i++) {
+    let far = pts[0], best = -1;
+    for (const p of pts) {
+      const d = (p[0] - cx) ** 2 + (p[1] - cy) ** 2;
+      if (d > best) { best = d; far = p; }
+    }
+    cx += (far[0] - cx) / (i + 1);
+    cy += (far[1] - cy) / (i + 1);
+  }
+  let r = 0;
+  for (const p of pts) r = Math.max(r, Math.hypot(p[0] - cx, p[1] - cy));
+  return { cx, cy, r };
+}
+
 const DEFAULT_SHOW: SectionName[] = ['header', 'roof', 'sun', 'strings', 'inverters', 'inventory'];
 
 // =================================================================================
@@ -156,6 +180,7 @@ class RoofPvCard extends LitElement {
     hass: { attribute: false },
     _config: { state: true },
     _mode: { state: true },
+    _view: { state: true },
     _selected: { state: true },
     _hoverKey: { state: true },
     _tick: { state: true },
@@ -169,6 +194,8 @@ class RoofPvCard extends LitElement {
   private _config?: CardConfig;
   private _model?: Model;
   private _mode: 'power' | 'relative' = 'power';
+  private _view: 'compass' | 'plan' = 'compass';
+  private _circle?: { cx: number; cy: number; r: number };
   private _selected?: number;
   private _hoverKey?: string;
   private _tick = 0;
@@ -203,6 +230,8 @@ class RoofPvCard extends LitElement {
         ? outlinePath(this._model.cells, { margin: config.outline_margin ?? 0.1, merge: config.outline_merge ?? 0.35 })
         : '';
     this._mode = config.mode ?? 'power';
+    this._view = config.view ?? 'compass';
+    this._circle = enclosingCircle(this._model.cells, (config.slot_labels ?? 'eave') === 'eave' ? 0.75 : 0.25);
     this._watched = this._collectWatched(config);
   }
 
@@ -403,6 +432,10 @@ class RoofPvCard extends LitElement {
         </div>
       </div>
       <div class="modes">
+        <button class=${this._view === 'compass' ? 'on' : ''} @click=${() => (this._view = 'compass')} title="Roof inside a compass">Compass</button>
+        <button class=${this._view === 'plan' ? 'on' : ''} @click=${() => (this._view = 'plan')} title="Roof plan">Plan</button>
+      </div>
+      <div class="modes">
         <button class=${this._mode === 'power' ? 'on' : ''} @click=${() => (this._mode = 'power')}>Power</button>
         <button class=${this._mode === 'relative' ? 'on' : ''} @click=${() => (this._mode = 'relative')}>Relative</button>
       </div>
@@ -435,8 +468,23 @@ class RoofPvCard extends LitElement {
     const labelMode = this._config!.slot_labels ?? 'eave';
     const pad = labelMode === 'eave' ? 0.75 : 0.5;
     const compassW = 2.2;
-    const vb = [m.bbox.x - pad, m.bbox.y - pad, m.bbox.w + 2 * pad + compassW, m.bbox.h + 2 * pad];
     const north = this._config!.north ?? 0;
+    const view = this._view;
+    // both views use a square drawing area
+    let vb: number[];
+    let ring: SVGTemplateResult | typeof nothing = nothing;
+    if (view === 'compass' && this._circle) {
+      const { cx: ccx, cy: ccy, r: rc } = this._circle;
+      const R = rc * 1.07 + 0.2; // inner margin between roof and circle
+      const half = R * 1.2; // labels outside the circle + outer margin
+      vb = [ccx - half, ccy - half, 2 * half, 2 * half];
+      ring = this._compassRing(ccx, ccy, R, north);
+    } else {
+      const w = m.bbox.w + 2 * pad + compassW;
+      const h = m.bbox.h + 2 * pad;
+      const side = Math.max(w, h);
+      vb = [m.bbox.x - pad - (side - w) / 2, m.bbox.y - pad - (side - h) / 2, side, side];
+    }
     const sel = this._selected;
     const hoverKey = this._hoverKey;
 
@@ -539,7 +587,7 @@ class RoofPvCard extends LitElement {
 
     const cx = m.bbox.x + m.bbox.w + pad + compassW / 2;
     const cy = m.bbox.y + 1.2;
-    const compass = svg`<g transform="translate(${cx} ${cy}) rotate(${north})" class="compass">
+    const compass = view === 'compass' ? nothing : svg`<g transform="translate(${cx} ${cy}) rotate(${north})" class="compass">
       <circle r="0.85"></circle>
       <path d="M0,-0.75 L0.22,0 L0,0.12 L-0.22,0 Z" class="n"></path>
       <path d="M0,0.75 L0.22,0 L0,-0.12 L-0.22,0 Z" class="s"></path>
@@ -565,12 +613,38 @@ class RoofPvCard extends LitElement {
             <rect width="0.06" height="0.18" fill="#9e9e9e" opacity="0.7"></rect>
           </pattern>
         </defs>
-        ${faces}${cells}${labels}${this._config!.face_labels ? faceLabels : nothing}${compass}
+        ${ring}${faces}${cells}${labels}${this._config!.face_labels ? faceLabels : nothing}${compass}
       </svg>
       ${legend}
       ${this._renderPicked()}
       ${sel !== undefined ? this._renderDetail(snap, sel) : html`<div class="hint">Tap a panel to see its inverter · Shift+click marks a panel and copies its ID.</div>`}
     </div>`;
+  }
+
+  private _compassRing(cx: number, cy: number, R: number, north: number) {
+    const pt = (az: number, r: number) => {
+      const a = ((az + north) * Math.PI) / 180;
+      return [cx + Math.sin(a) * r, cy - Math.cos(a) * r];
+    };
+    const ticks: SVGTemplateResult[] = [];
+    for (let az = 0; az < 360; az += 5) {
+      const major = az % 45 === 0;
+      const mid = az % 15 === 0;
+      const len = R * (major ? 0.05 : mid ? 0.03 : 0.015);
+      const [x1, y1] = pt(az, R);
+      const [x2, y2] = pt(az, R - len);
+      ticks.push(svg`<line x1=${x1} y1=${y1} x2=${x2} y2=${y2} class="tick ${major ? 'major' : ''}" style="stroke-width:${R * (major ? 0.006 : 0.003)}"></line>`);
+    }
+    const names: [string, number][] = [['N', 0], ['NE', 45], ['E', 90], ['SE', 135], ['S', 180], ['SW', 225], ['W', 270], ['NW', 315]];
+    const labels = names.map(([n, az]) => {
+      const [x, y] = pt(az, R * 1.09);
+      const card = n.length === 1;
+      return svg`<text x=${x} y=${y} class="rose ${n === 'N' ? 'north' : ''}" style="font-size:${R * (card ? 0.075 : 0.05)}px">${n}</text>`;
+    });
+    return svg`<g class="compassring" pointer-events="none">
+      <circle cx=${cx} cy=${cy} r=${R} class="dial" style="stroke-width:${R * 0.006}"></circle>
+      ${ticks}${labels}
+    </g>`;
   }
 
   private _legend(stops: [number, string][], lo: string, hi: string, prefix?: string) {
@@ -1087,6 +1161,27 @@ class RoofPvCard extends LitElement {
     .fsub {
       font-size: 0.32px;
       fill-opacity: 0.85;
+    }
+    .compassring .dial {
+      stroke-dasharray: none;
+      fill: rgba(255, 255, 255, 0.02);
+      stroke: #4a525d;
+    }
+    .compassring .tick {
+      stroke: #59616c;
+    }
+    .compassring .tick.major {
+      stroke: #8a929c;
+    }
+    .compassring .rose {
+      stroke: none;
+      fill: #9aa3ad;
+      text-anchor: middle;
+      dominant-baseline: central;
+      font-weight: 600;
+    }
+    .compassring .rose.north {
+      fill: #e53935;
     }
     .compass circle {
       fill: #0f1318;

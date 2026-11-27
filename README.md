@@ -46,6 +46,7 @@ The card is configured in YAML (no visual editor yet). See [`examples/example.ya
 | `outline_merge` | `0.35` | Gaps up to twice this width (m) are bridged by the outline |
 | `slot_labels` | `eave` | Inverter numbers at the downhill edge of each face (`eave`), on the panels (`center`) or `none` |
 | `face_labels` | `false` | Show face name, orientation and slope arrow on the drawing |
+| `view` | `compass` | Roof view: `compass` (roof inside a compass circle, N/E/S/W rotated by `north`) or `plan`; both square, toggle in the header |
 | `mode` | `power` | Initial colour mode, `power` or `relative` |
 | `show` | all | Sections and their order: `header`, `roof`, `sun`, `strings`, `inverters`, `inventory` |
 | `daylight_elevation` | `5` | Sun elevation (°) above which missing data counts as offline |
