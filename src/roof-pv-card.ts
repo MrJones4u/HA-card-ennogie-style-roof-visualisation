@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.2.3';
+const VERSION = '0.2.4';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -162,28 +162,57 @@ function resample(rows: { t: number; p: number }[], step: number) {
   return out;
 }
 
-/** approximate smallest circle around all cells (each grown by `pad` metres) */
-function enclosingCircle(cells: { x: number; y: number; w: number; h: number }[], pad: number) {
-  const pts: [number, number][] = [];
-  for (const c of cells) {
-    pts.push([c.x - pad, c.y - pad], [c.x + c.w + pad, c.y - pad], [c.x - pad, c.y + c.h + pad], [c.x + c.w + pad, c.y + c.h + pad]);
+/** exact smallest enclosing circle (Welzl, iterative) */
+function minCircle(pts: [number, number][]) {
+  const p = [...pts];
+  for (let i = p.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [p[i], p[j]] = [p[j], p[i]];
   }
-  if (!pts.length) return undefined;
-  let cx = pts.reduce((a, p) => a + p[0], 0) / pts.length;
-  let cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
-  // Badoiu-Clarkson iteration
-  for (let i = 1; i <= 2000; i++) {
-    let far = pts[0], best = -1;
-    for (const p of pts) {
-      const d = (p[0] - cx) ** 2 + (p[1] - cy) ** 2;
-      if (d > best) { best = d; far = p; }
+  const inC = (c: { cx: number; cy: number; r: number }, q: [number, number]) => Math.hypot(q[0] - c.cx, q[1] - c.cy) <= c.r + 1e-9;
+  const two = (a: [number, number], b: [number, number]) => ({ cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, r: Math.hypot(a[0] - b[0], a[1] - b[1]) / 2 });
+  const three = (a: [number, number], b: [number, number], c: [number, number]) => {
+    const d = 2 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]));
+    if (Math.abs(d) < 1e-12) {
+      const cs = [two(a, b), two(a, c), two(b, c)].sort((x, y) => y.r - x.r);
+      return cs[0];
     }
-    cx += (far[0] - cx) / (i + 1);
-    cy += (far[1] - cy) / (i + 1);
+    const a2 = a[0] ** 2 + a[1] ** 2, b2 = b[0] ** 2 + b[1] ** 2, c2 = c[0] ** 2 + c[1] ** 2;
+    const cx = (a2 * (b[1] - c[1]) + b2 * (c[1] - a[1]) + c2 * (a[1] - b[1])) / d;
+    const cy = (a2 * (c[0] - b[0]) + b2 * (a[0] - c[0]) + c2 * (b[0] - a[0])) / d;
+    return { cx, cy, r: Math.hypot(a[0] - cx, a[1] - cy) };
+  };
+  let c = { cx: p[0][0], cy: p[0][1], r: 0 };
+  for (let i = 1; i < p.length; i++) {
+    if (inC(c, p[i])) continue;
+    c = { cx: p[i][0], cy: p[i][1], r: 0 };
+    for (let j = 0; j < i; j++) {
+      if (inC(c, p[j])) continue;
+      c = two(p[i], p[j]);
+      for (let k = 0; k < j; k++) if (!inC(c, p[k])) c = three(p[i], p[j], p[k]);
+    }
   }
-  let r = 0;
-  for (const p of pts) r = Math.max(r, Math.hypot(p[0] - cx, p[1] - cy));
-  return { cx, cy, r };
+  return c;
+}
+
+/** tight circle around all cells plus the inverter labels at the eaves */
+function roofCircle(model: Model, eaveLabels: boolean) {
+  const pts: [number, number][] = [];
+  const m = 0.05; // outline margin
+  for (const c of model.cells) {
+    pts.push([c.x - m, c.y - m], [c.x + c.w + m, c.y - m], [c.x - m, c.y + c.h + m], [c.x + c.w + m, c.y + c.h + m]);
+  }
+  if (eaveLabels) {
+    const o = 0.6; // label distance + text size
+    for (const f of model.faces) {
+      const b = f.bbox;
+      if (f.slope === 'down') pts.push([b.x, b.y + b.h + o], [b.x + b.w, b.y + b.h + o]);
+      if (f.slope === 'up') pts.push([b.x, b.y - o], [b.x + b.w, b.y - o]);
+      if (f.slope === 'left') pts.push([b.x - o, b.y], [b.x - o, b.y + b.h]);
+      if (f.slope === 'right') pts.push([b.x + b.w + o, b.y], [b.x + b.w + o, b.y + b.h]);
+    }
+  }
+  return pts.length ? minCircle(pts) : undefined;
 }
 
 const DEFAULT_SHOW: SectionName[] = ['header', 'roof', 'sun', 'strings', 'inverters', 'inventory'];
@@ -281,7 +310,7 @@ class RoofPvCard extends LitElement {
         : '';
     this._mode = config.mode ?? 'power';
     this._view = config.view ?? 'compass';
-    this._circle = enclosingCircle(this._model.cells, (config.slot_labels ?? 'eave') === 'eave' ? 0.75 : 0.25);
+    this._circle = roofCircle(this._model, (config.slot_labels ?? 'eave') === 'eave');
     this._watched = this._collectWatched(config);
   }
 
@@ -535,7 +564,7 @@ class RoofPvCard extends LitElement {
     let ring: SVGTemplateResult | typeof nothing = nothing;
     if (view === 'compass' && this._circle) {
       const { cx: ccx, cy: ccy, r: rc } = this._circle;
-      const R = rc * 1.22 + 0.2; // inner margin between roof and circle (room for the direction labels)
+      const R = rc / 0.885; // circle just outside the direction labels, which sit just outside the roof
       const half = R * 1.32; // outer band: power rays + margin
       vb = [ccx - half, ccy - half, 2 * half, 2 * half];
       ring = this._compassRing(ccx, ccy, R, north, snap);
