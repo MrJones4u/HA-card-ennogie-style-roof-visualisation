@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.2.1';
+const VERSION = '0.2.2';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -509,8 +509,8 @@ class RoofPvCard extends LitElement {
     let ring: SVGTemplateResult | typeof nothing = nothing;
     if (view === 'compass' && this._circle) {
       const { cx: ccx, cy: ccy, r: rc } = this._circle;
-      const R = rc * 1.07 + 0.2; // inner margin between roof and circle
-      const half = R * 1.2; // labels outside the circle + outer margin
+      const R = rc * 1.22 + 0.2; // inner margin between roof and circle (room for the direction labels)
+      const half = R * 1.05; // outer margin around the circle
       vb = [ccx - half, ccy - half, 2 * half, 2 * half];
       ring = this._compassRing(ccx, ccy, R, north);
     } else {
@@ -671,9 +671,9 @@ class RoofPvCard extends LitElement {
     }
     const names: [string, number][] = [['N', 0], ['NE', 45], ['E', 90], ['SE', 135], ['S', 180], ['SW', 225], ['W', 270], ['NW', 315]];
     const labels = names.map(([n, az]) => {
-      const [x, y] = pt(az, R * 1.09);
       const card = n.length === 1;
-      return svg`<text x=${x} y=${y} class="rose ${n === 'N' ? 'north' : ''}" style="font-size:${R * (card ? 0.075 : 0.05)}px">${n}</text>`;
+      const [x, y] = pt(az, R * (card ? 0.885 : 0.9));
+      return svg`<text x=${x} y=${y} class="rose ${n === 'N' ? 'north' : ''}" style="font-size:${R * (card ? 0.058 : 0.04)}px">${n}</text>`;
     });
     return svg`<g class="compassring" pointer-events="none">
       <circle cx=${cx} cy=${cy} r=${R} class="dial" style="stroke-width:${R * 0.006}"></circle>
