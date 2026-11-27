@@ -16,7 +16,7 @@ if (q.get('mode')) cfg.mode = q.get('mode');
 if (q.get('view')) cfg.view = q.get('view');
 if (q.get('w')) document.body.style.setProperty('--w', q.get('w')+'px');
 el.setConfig(cfg);
-el.hass = { states: window.STATES, config: { latitude: 49.9597, longitude: 7.8702 } };
+el.hass = { states: window.STATES, config: { latitude: 49.9597, longitude: 7.8702 }, callWS: async (m) => ({ [m.entity_ids[0]]: (window.PHIST||[]).filter(r => r.lu*1000 <= Date.now()) }) };
 document.body.appendChild(el);
 if (q.get('sel')) setTimeout(()=>{ el._selected = parseInt(q.get('sel')); }, 50);
 window.addEventListener('hass-more-info', e => console.log('more-info', e.detail.entityId));

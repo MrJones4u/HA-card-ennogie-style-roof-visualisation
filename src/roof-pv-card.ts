@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.2.2';
+const VERSION = '0.2.3';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -29,6 +29,7 @@ interface Hass {
   config: { latitude: number; longitude: number; time_zone?: string };
   locale?: { language?: string };
   language?: string;
+  callWS?: <T>(msg: Record<string, unknown>) => Promise<T>;
 }
 
 type Status = 'missing' | 'offline' | 'fault' | 'low' | 'ok' | 'night';
@@ -148,6 +149,19 @@ const median = (a: number[]) => {
 const fmtTime = (d?: Date) => (d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '–');
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** step-hold resampling of a state history to fixed intervals */
+function resample(rows: { t: number; p: number }[], step: number) {
+  if (!rows.length) return [];
+  const out: { t: number; p: number }[] = [];
+  let i = 0;
+  const end = Math.min(Date.now(), rows[rows.length - 1].t + 15 * 60000);
+  for (let t = Math.ceil(rows[0].t / step) * step; t <= end; t += step) {
+    while (i + 1 < rows.length && rows[i + 1].t <= t) i++;
+    out.push({ t, p: rows[i].p });
+  }
+  return out;
+}
+
 /** approximate smallest circle around all cells (each grown by `pad` metres) */
 function enclosingCircle(cells: { x: number; y: number; w: number; h: number }[], pad: number) {
   const pts: [number, number][] = [];
@@ -198,6 +212,9 @@ class RoofPvCard extends LitElement {
   private _view: 'compass' | 'plan' = 'compass';
   private _circle?: { cx: number; cy: number; r: number };
   private _loadError?: string;
+  private _history: { t: number; p: number }[] = [];
+  private _historyKey = '';
+  private _historyAt = 0;
   private _loadSeq = 0;
   private _selected?: number;
   private _hoverKey?: string;
@@ -284,7 +301,10 @@ class RoofPvCard extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this._timer = window.setInterval(() => (this._tick = Date.now()), 60000);
+    this._timer = window.setInterval(() => {
+      this._tick = Date.now();
+      this._maybeLoadHistory();
+    }, 60000);
   }
   disconnectedCallback() {
     super.disconnectedCallback();
@@ -308,6 +328,10 @@ class RoofPvCard extends LitElement {
     return ids;
   }
 
+  protected updated() {
+    this._maybeLoadHistory();
+  }
+
   protected shouldUpdate(changed: PropertyValues): boolean {
     if (!changed.has('hass') || changed.size > 1) return true;
     const old = changed.get('hass') as Hass | undefined;
@@ -324,7 +348,7 @@ class RoofPvCard extends LitElement {
     const lat = cfg.latitude ?? hass.config.latitude;
     const lon = cfg.longitude ?? hass.config.longitude;
     const sun = sunPosition(new Date(), lat, lon);
-    const day = sun.elevation > (cfg.daylight_elevation ?? 5);
+    const sunUp = sun.elevation > (cfg.daylight_elevation ?? 5);
 
     // raw values
     const raw = new Map<number, { p: [number | null, number | null]; missing: boolean; inv: InverterConfig }>();
@@ -354,6 +378,9 @@ class RoofPvCard extends LitElement {
     }
     const refs = new Map<string, number | null>();
     for (const [g, a] of groups) refs.set(g, median(a));
+    // "day" = sun high enough or the roof still produces measurably (dusk, dawn)
+    const LIT = 3; // W per panel
+    const day = sunUp || [...refs.values()].some((r) => (r ?? 0) >= LIT);
 
     const invMap = new Map<number, InvState>();
     let total = 0;
@@ -370,9 +397,8 @@ class RoofPvCard extends LitElement {
         const rel = wpp !== null && ref && ref > 0 ? wpp / ref : null;
         let status: Status;
         if (r.missing) status = 'missing';
-        else if (power === null) status = day ? 'offline' : 'night';
-        else if (!day) status = 'night';
-        else if (ref === null || ref < 5) status = 'ok';
+        else if (power === null) status = sunUp ? 'offline' : 'night';
+        else if (ref === null || ref < LIT) status = sunUp ? 'ok' : 'night';
         else if (wpp! < 0.1 * ref) status = 'fault';
         else if (wpp! < 0.7 * ref) status = 'low';
         else status = 'ok';
@@ -486,9 +512,9 @@ class RoofPvCard extends LitElement {
     const s = st?.inputs[input];
     if (!st || !s) return { fill: '#3a3a3a', status: 'missing' };
     if (s.status === 'missing' || s.status === 'offline') return { fill: '#1a1a1a', status: s.status, s };
-    const relColor = snap.day && s.rel !== null ? scale(REL_STOPS, s.rel) : BAR_NEUTRAL;
+    const relColor = s.ref !== null && s.ref >= 3 && s.rel !== null ? scale(REL_STOPS, s.rel) : BAR_NEUTRAL;
     if (this._mode === 'relative') {
-      if (!snap.day || s.rel === null) return { fill: PANEL_BG, status: s.status, s };
+      if (s.ref === null || s.ref < 3 || s.rel === null) return { fill: PANEL_BG, status: s.status, s };
       return { fill: relColor, status: s.status, s };
     }
     // power mode: dark panel with a bar 0..100 % of panel_wp, coloured by the relative value
@@ -510,9 +536,9 @@ class RoofPvCard extends LitElement {
     if (view === 'compass' && this._circle) {
       const { cx: ccx, cy: ccy, r: rc } = this._circle;
       const R = rc * 1.22 + 0.2; // inner margin between roof and circle (room for the direction labels)
-      const half = R * 1.05; // outer margin around the circle
+      const half = R * 1.32; // outer band: power rays + margin
       vb = [ccx - half, ccy - half, 2 * half, 2 * half];
-      ring = this._compassRing(ccx, ccy, R, north);
+      ring = this._compassRing(ccx, ccy, R, north, snap);
     } else {
       const w = m.bbox.w + 2 * pad + compassW;
       const h = m.bbox.h + 2 * pad;
@@ -538,7 +564,7 @@ class RoofPvCard extends LitElement {
       if (c.dummy) return svg`<rect class="dummy" x=${c.x + 0.02} y=${c.y + 0.02} width=${c.w - 0.04} height=${c.h - 0.04}></rect>`;
       const { fill, status, s, bar } = this._cellColor(snap, c.slot!, c.input!);
       const inset = 0.08;
-      const barH = bar ? (c.h - 2 * inset) * bar.frac : 0;
+      const barH = bar ? Math.max((c.h - 2 * inset) * bar.frac, (s?.wpp ?? 0) > 0.5 ? 0.04 : 0) : 0;
       const k = inputKey(c.slot!, c.input!);
       const dim = sel !== undefined && sel !== c.slot;
       const hl = sel === c.slot || hoverKey === k;
@@ -655,7 +681,7 @@ class RoofPvCard extends LitElement {
     </div>`;
   }
 
-  private _compassRing(cx: number, cy: number, R: number, north: number) {
+  private _compassRing(cx: number, cy: number, R: number, north: number, snap: Snapshot) {
     const pt = (az: number, r: number) => {
       const a = ((az + north) * Math.PI) / 180;
       return [cx + Math.sin(a) * r, cy - Math.cos(a) * r];
@@ -672,13 +698,84 @@ class RoofPvCard extends LitElement {
     const names: [string, number][] = [['N', 0], ['NE', 45], ['E', 90], ['SE', 135], ['S', 180], ['SW', 225], ['W', 270], ['NW', 315]];
     const labels = names.map(([n, az]) => {
       const card = n.length === 1;
-      const [x, y] = pt(az, R * (card ? 0.885 : 0.9));
-      return svg`<text x=${x} y=${y} class="rose ${n === 'N' ? 'north' : ''}" style="font-size:${R * (card ? 0.058 : 0.04)}px">${n}</text>`;
+      const fs = R * (card ? 0.042 : 0.03);
+      const [x, y] = pt(az, R * 0.95 - fs * 0.75);
+      return svg`<text x=${x} y=${y} class="rose ${n === 'N' ? 'north' : ''}" style="font-size:${fs}px">${n}</text>`;
     });
+
+    // power rays outside the circle: roof power at the sun's azimuth over today
+    const rays: SVGTemplateResult[] = [];
+    const lat = this._lat(), lon = this._lon();
+    const hist = this._history;
+    const kwp = ((this._config!.panel_wp ?? 400) * this._model!.totalPanels) || 1;
+    const peak = hist.reduce((a, h) => Math.max(a, h.p), 0);
+    const scaleW = Math.max(peak, kwp * 0.2); // full ray length
+    const r0 = R * 1.025;
+    const band = R * 0.22;
+    let prevAz: number | undefined;
+    for (const h of hist) {
+      if (h.p <= 0) continue;
+      const sp = sunPosition(new Date(h.t), lat, lon);
+      if (sp.elevation < -2) continue;
+      const len = band * Math.min(1, h.p / scaleW);
+      const [x1, y1] = pt(sp.azimuth, r0);
+      const [x2, y2] = pt(sp.azimuth, r0 + len);
+      const v = Math.min(1, h.p / scaleW);
+      rays.push(svg`<line x1=${x1} y1=${y1} x2=${x2} y2=${y2} class="ray" style="stroke:${scale(POWER_STOPS, 0.35 + 0.65 * v)};stroke-width:${R * 0.009}"></line>`);
+      prevAz = sp.azimuth;
+    }
+    void prevAz;
+
+    // the sun on the circle
+    let sun: SVGTemplateResult | typeof nothing = nothing;
+    if (snap.sun.elevation > -0.5) {
+      const [sx, sy] = pt(snap.sun.azimuth, R);
+      const r = R * 0.028;
+      const rayEls = [0, 45, 90, 135, 180, 225, 270, 315].map((a) => {
+        const rad = (a * Math.PI) / 180;
+        return svg`<line x1=${sx + Math.cos(rad) * r * 1.35} y1=${sy + Math.sin(rad) * r * 1.35} x2=${sx + Math.cos(rad) * r * 1.9} y2=${sy + Math.sin(rad) * r * 1.9} style="stroke-width:${r * 0.32}"></line>`;
+      });
+      sun = svg`<g class="sunicon"><circle cx=${sx} cy=${sy} r=${r}></circle>${rayEls}</g>`;
+    }
+
     return svg`<g class="compassring" pointer-events="none">
       <circle cx=${cx} cy=${cy} r=${R} class="dial" style="stroke-width:${R * 0.006}"></circle>
-      ${ticks}${labels}
+      ${rays}${ticks}${labels}${sun}
     </g>`;
+  }
+
+  /** today's total power history (for the rays around the compass) */
+  private _maybeLoadHistory(force = false) {
+    const ent = this._config?.total_power_entity;
+    if (!ent || !this.hass?.callWS) return;
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const key = `${ent}|${start.toDateString()}`;
+    if (!force && key === this._historyKey && Date.now() - this._historyAt < 5 * 60000) return;
+    this._historyKey = key;
+    this._historyAt = Date.now();
+    this.hass
+      .callWS<Record<string, { s: string; lu: number }[]>>({
+        type: 'history/history_during_period',
+        start_time: start.toISOString(),
+        end_time: new Date().toISOString(),
+        entity_ids: [ent],
+        minimal_response: true,
+        no_attributes: true,
+      })
+      .then((res) => {
+        const rows = res?.[ent] ?? [];
+        const out: { t: number; p: number }[] = [];
+        for (const r of rows) {
+          const v = parseFloat(r.s);
+          if (isFinite(v)) out.push({ t: r.lu * 1000, p: v });
+        }
+        this._history = resample(out, 5 * 60000);
+        this.requestUpdate();
+      })
+      .catch(() => {
+        /* history not available – no rays */
+      });
   }
 
   private _legend(stops: [number, string][], lo: string, hi: string, prefix?: string) {
@@ -1206,6 +1303,16 @@ class RoofPvCard extends LitElement {
     }
     .compassring .tick.major {
       stroke: #8a929c;
+    }
+    .compassring .ray {
+      stroke-linecap: butt;
+    }
+    .compassring .sunicon circle {
+      fill: #ffd54f;
+    }
+    .compassring .sunicon line {
+      stroke: #ffd54f;
+      stroke-linecap: round;
     }
     .compassring .rose {
       stroke: none;
