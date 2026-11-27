@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.3.3';
+const VERSION = '0.3.4';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -232,6 +232,7 @@ class RoofPvCard extends LitElement {
     _view: { state: true },
     _loadError: { state: true },
     _scrubTime: { state: true },
+    _viewRot: { state: true },
     _selected: { state: true },
     _hoverKey: { state: true },
     _tick: { state: true },
@@ -254,6 +255,11 @@ class RoofPvCard extends LitElement {
   private _scrubTimer?: number;
   private _replayTimer?: number;
   private _dragging = false;
+  /** what the pointer is dragging: the sun (time) or a compass letter (view rotation) */
+  private _dragMode: 'sun' | 'rotate' = 'sun';
+  /** display rotation of the compass view in degrees (per browser, not a config change) */
+  private _viewRot = 0;
+  private _rotStart?: { pointer: number; rot: number };
   private _invHist = new Map<string, { t: number; v: number | null }[]>();
   private _invHistAt = 0;
   private _invHistLoading = false;
@@ -326,6 +332,7 @@ class RoofPvCard extends LitElement {
         : '';
     this._mode = config.mode ?? 'power';
     this._view = config.view ?? 'compass';
+    this._viewRot = this._loadRot();
     this._circle = roofCircle(this._model, (config.slot_labels ?? 'eave') === 'eave');
     this._watched = this._collectWatched(config);
   }
@@ -578,6 +585,7 @@ class RoofPvCard extends LitElement {
     const compassW = 2.2;
     const north = this._config!.north ?? 0;
     const view = this._view;
+    const rot = view === 'compass' ? this._viewRot : 0;
     // both views use a square drawing area
     let vb: number[];
     let ring: SVGTemplateResult | typeof nothing = nothing;
@@ -657,7 +665,7 @@ class RoofPvCard extends LitElement {
         const cy = a.y / a.n;
         if (labelMode === 'none') continue;
         if (labelMode === 'center' || !f.slope) {
-          labels.push(svg`<text class="slot" x=${cx} y=${cy} pointer-events="none">${slot}</text>`);
+          labels.push(svg`<text class="slot" x=${cx} y=${cy} pointer-events="none" transform=${`rotate(${-rot} ${cx} ${cy})`}>${slot}</text>`);
           continue;
         }
         // eave = downhill edge, where the inverters sit; position along the edge from the
@@ -674,7 +682,7 @@ class RoofPvCard extends LitElement {
           : f.slope === 'left' ? [b.x - off, along]
           : [b.x + b.w + off, along];
         const sel = this._selected === slot;
-        labels.push(svg`<text class="slot eave ${sel ? 'sel' : ''}" x=${x} y=${y} @click=${() => this._select(slot)}>${slot}</text>`);
+        labels.push(svg`<text class="slot eave ${sel ? 'sel' : ''}" x=${x} y=${y} transform=${`rotate(${-rot} ${x} ${y})`} @click=${() => this._select(slot)}>${slot}</text>`);
       }
     }
 
@@ -727,7 +735,9 @@ class RoofPvCard extends LitElement {
             <rect width="0.06" height="0.18" fill="#9e9e9e" opacity="0.7"></rect>
           </pattern>
         </defs>
-        ${ring}${faces}${cells}${labels}${this._config!.face_labels ? faceLabels : nothing}${compass}
+        <g transform=${rot && this._dial ? `rotate(${rot} ${this._dial.cx} ${this._dial.cy})` : ''}>
+          ${ring}${faces}${cells}${labels}${this._config!.face_labels ? faceLabels : nothing}
+        </g>${compass}
       </svg>
       ${legend}
       ${this._renderPicked()}
@@ -754,7 +764,10 @@ class RoofPvCard extends LitElement {
       const card = n.length === 1;
       const fs = R * (card ? 0.042 : 0.03);
       const [x, y] = pt(az, R * 0.95 - fs * 0.75);
-      return svg`<text x=${x} y=${y} class="rose ${n === 'N' ? 'north' : ''}" style="font-size:${fs}px">${n}</text>`;
+      return svg`<g class="rosegrab" @pointerdown=${(e: PointerEvent) => this._rotateStart(e)} @dblclick=${(e: Event) => this._resetRotation(e)}>
+        <circle cx=${x} cy=${y} r=${fs * 1.1} class="grab"></circle>
+        <text x=${x} y=${y} class="rose ${n === 'N' ? 'north' : ''}" style="font-size:${fs}px" transform="rotate(${-this._viewRot} ${x} ${y})">${n}</text>
+      </g>`;
     });
 
     // power rays outside the circle: roof power at the sun's azimuth over today
@@ -804,10 +817,53 @@ class RoofPvCard extends LitElement {
     return svg`<g class="compassring">
       <g pointer-events="none">
         <circle cx=${cx} cy=${cy} r=${R} class="dial" style="stroke-width:${R * 0.006}"></circle>
-        ${rays}${ticks}${labels}
+        ${rays}${ticks}
       </g>
+      ${labels}
       ${sun}
     </g>`;
+  }
+
+  // ---------------------------------------------------------------- view rotation (drag a compass letter)
+  private _rotKey() {
+    return `roof-pv-card:rotation:${this._config?.config_url ?? this._config?.title ?? 'default'}`;
+  }
+  private _loadRot(): number {
+    try {
+      return parseFloat(window.localStorage.getItem(this._rotKey()) ?? '0') || 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+  private _saveRot() {
+    try {
+      window.localStorage.setItem(this._rotKey(), String(Math.round(this._viewRot * 10) / 10));
+    } catch (_) {
+      /* storage not available */
+    }
+  }
+
+  private _pointerAngle(e: PointerEvent): number | undefined {
+    const p = this._svgPoint(e);
+    if (!p || !this._dial) return undefined;
+    return (Math.atan2(p[0] - this._dial.cx, -(p[1] - this._dial.cy)) * 180) / Math.PI;
+  }
+
+  private _rotateStart(e: PointerEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const a = this._pointerAngle(e);
+    if (a === undefined) return;
+    this._dragMode = 'rotate';
+    this._dragging = true;
+    this._rotStart = { pointer: a, rot: this._viewRot };
+    (this.shadowRoot?.querySelector('.roof svg') as SVGSVGElement | null)?.setPointerCapture(e.pointerId);
+  }
+
+  private _resetRotation(e: Event) {
+    e.stopPropagation();
+    this._viewRot = 0;
+    this._saveRot();
   }
 
   // ---------------------------------------------------------------- time scrubbing (drag the sun)
@@ -823,6 +879,7 @@ class RoofPvCard extends LitElement {
     e.preventDefault();
     e.stopPropagation();
     this._stopReplay();
+    this._dragMode = 'sun';
     this._dragging = true;
     (this.shadowRoot?.querySelector('.roof svg') as SVGSVGElement | null)?.setPointerCapture(e.pointerId);
     this._loadInverterHistory();
@@ -831,10 +888,22 @@ class RoofPvCard extends LitElement {
 
   private _dragMove(e: PointerEvent) {
     if (!this._dragging || !this._dial) return;
+    if (this._dragMode === 'rotate') {
+      const a = this._pointerAngle(e);
+      if (a === undefined || !this._rotStart) return;
+      let rot = this._rotStart.rot + (a - this._rotStart.pointer);
+      rot = ((rot % 360) + 540) % 360 - 180;
+      // snap: north up or the original drawing orientation
+      const north = this._dial.north;
+      const northUp = ((-north % 360) + 540) % 360 - 180;
+      for (const target of [0, northUp]) if (Math.abs(rot - target) < 3) rot = target;
+      this._viewRot = rot;
+      return;
+    }
     const p = this._svgPoint(e);
     if (!p) return;
     const { cx, cy, north } = this._dial;
-    const drawAngle = (Math.atan2(p[0] - cx, -(p[1] - cy)) * 180) / Math.PI; // clockwise from up
+    const drawAngle = (Math.atan2(p[0] - cx, -(p[1] - cy)) * 180) / Math.PI - this._viewRot; // clockwise from up, unrotated
     const az = norm(drawAngle - north);
     const t = this._timeForAzimuth(az);
     if (t !== undefined) this._scrubTime = Math.ceil(t / 60000) * 60000;
@@ -843,6 +912,16 @@ class RoofPvCard extends LitElement {
   private _dragEnd(e: PointerEvent) {
     if (!this._dragging) return;
     this._dragging = false;
+    if (this._dragMode === 'rotate') {
+      try {
+        (this.shadowRoot?.querySelector('.roof svg') as SVGSVGElement | null)?.releasePointerCapture(e.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
+      this._dragMode = 'sun';
+      this._saveRot();
+      return;
+    }
     try {
       (this.shadowRoot?.querySelector('.roof svg') as SVGSVGElement | null)?.releasePointerCapture(e.pointerId);
     } catch (_) {
@@ -1593,6 +1672,13 @@ class RoofPvCard extends LitElement {
     .compassring .sunicon line {
       stroke: #ffd54f;
       stroke-linecap: round;
+    }
+    .compassring .rosegrab {
+      cursor: grab;
+      touch-action: none;
+    }
+    .compassring .rosegrab .grab {
+      fill: transparent;
     }
     .compassring .rose {
       stroke: none;
