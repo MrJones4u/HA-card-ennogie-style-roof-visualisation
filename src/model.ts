@@ -16,7 +16,7 @@ export interface FaceConfig {
   y?: number;
   left?: number;
   top?: number;
-  /** grid, one row per line, tokens separated by whitespace: `12a` = inverter slot 12 input 1, `12b` = input 2, `.` = nothing, `x` = dummy tile */
+  /** grid, one row per line, tokens separated by whitespace: `12a` = inverter slot 12 input 1, `12b` = input 2, `.` = nothing, `-` = roof without PV (chimney, duct …), `x` = dummy tile */
   map: string;
   panel_size?: [number, number];
 }
@@ -95,6 +95,8 @@ export interface Cell {
   slot?: number;
   input?: 0 | 1;
   dummy?: boolean;
+  /** roof area without PV: part of the outline, not drawn as a panel */
+  roof?: boolean;
 }
 
 export interface FaceModel {
@@ -164,9 +166,11 @@ export function buildModel(cfg: CardConfig): Model {
       const toks = row.split(/\s+/);
       maxCols = Math.max(maxCols, toks.length);
       toks.forEach((tok, c) => {
-        if (tok === '.' || tok === '-') return;
+        if (tok === '.') return;
         const cell: Cell = { x: fx + c * pw, y: fy + r * ph, w: pw, h: ph, face: index, row: r + 1, col: c + 1 };
-        if (tok.toLowerCase() === 'x') {
+        if (tok === '-') {
+          cell.roof = true;
+        } else if (tok.toLowerCase() === 'x') {
           cell.dummy = true;
         } else {
           const m = /^(\d+)([ab12])$/i.exec(tok);
@@ -198,7 +202,7 @@ export function buildModel(cfg: CardConfig): Model {
       slope: f.slope,
       bbox: { x: fx, y: fy, w: maxCols * pw, h: rows.length * ph },
       cells: fc,
-      panels: fc.filter((c) => !c.dummy).length,
+      panels: fc.filter((c) => !c.dummy && !c.roof).length,
       slots,
     });
   });
@@ -224,7 +228,7 @@ export function buildModel(cfg: CardConfig): Model {
     cells,
     inputs,
     bbox: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 },
-    totalPanels: cells.filter((c) => !c.dummy).length,
+    totalPanels: cells.filter((c) => !c.dummy && !c.roof).length,
     warnings,
   };
 }

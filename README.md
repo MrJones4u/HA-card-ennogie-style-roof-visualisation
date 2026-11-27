@@ -70,7 +70,8 @@ faces:
 Each line of `map` is one row of panels from top to bottom, each token one panel:
 
 - `12a` – panel on inverter **slot 12, input 1** (`12b` = input 2; `121`/`122` also work)
-- `.` – no panel
+- `.` – nothing (outside the roof)
+- `-` – roof without PV (chimney, ventilation duct …): filled as roof inside the outline, no panel
 - `x` – dummy / inactive tile (drawn, but not counted)
 
 Use `position` rather than separate `x:` / `y:` keys: some YAML parsers read a bare `y:` key as the boolean `true`.

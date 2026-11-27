@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.1.6';
+const VERSION = '0.1.7';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -452,6 +452,7 @@ class RoofPvCard extends LitElement {
           : nothing;
 
     const cells = m.cells.map((c) => {
+      if (c.roof) return nothing;
       if (c.dummy) return svg`<rect class="dummy" x=${c.x + 0.02} y=${c.y + 0.02} width=${c.w - 0.04} height=${c.h - 0.04}></rect>`;
       const { fill, status, s, bar } = this._cellColor(snap, c.slot!, c.input!);
       const inset = 0.08;
