@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.2.5';
+const VERSION = '0.3.0';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -149,6 +149,10 @@ const median = (a: number[]) => {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 const fmtTime = (d?: Date) => (d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '–');
+const hhmm = (t: number) => {
+  const d = new Date(t);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** step-hold resampling of a state history to fixed intervals */
@@ -227,6 +231,7 @@ class RoofPvCard extends LitElement {
     _mode: { state: true },
     _view: { state: true },
     _loadError: { state: true },
+    _scrubTime: { state: true },
     _selected: { state: true },
     _hoverKey: { state: true },
     _tick: { state: true },
@@ -244,6 +249,14 @@ class RoofPvCard extends LitElement {
   private _circle?: { cx: number; cy: number; r: number };
   private _loadError?: string;
   private _history: { t: number; p: number }[] = [];
+  /** time shown while the sun is dragged (ms), undefined = real time */
+  private _scrubTime?: number;
+  private _scrubTimer?: number;
+  private _dragging = false;
+  private _invHist = new Map<string, { t: number; v: number | null }[]>();
+  private _invHistAt = 0;
+  private _invHistLoading = false;
+  private _dial?: { cx: number; cy: number; R: number; north: number };
   private _historyKey = '';
   private _historyAt = 0;
   private _loadSeq = 0;
@@ -378,15 +391,17 @@ class RoofPvCard extends LitElement {
     const hass = this.hass!;
     const lat = cfg.latitude ?? hass.config.latitude;
     const lon = cfg.longitude ?? hass.config.longitude;
-    const sun = sunPosition(new Date(), lat, lon);
+    const at = this._scrubTime;
+    const sun = sunPosition(at !== undefined ? new Date(at) : new Date(), lat, lon);
     const sunUp = sun.elevation > (cfg.daylight_elevation ?? 5);
+    const value = (id: string): number | null => (at !== undefined ? this._histVal(id, at) : num(hass.states[id]?.state));
 
     // raw values
     const raw = new Map<number, { p: [number | null, number | null]; missing: boolean; inv: InverterConfig }>();
     for (const inv of cfg.inverters) {
-      const e1 = hass.states[this._entity(inv, 'power_ch_1')];
-      const e2 = hass.states[this._entity(inv, 'power_ch_2')];
-      raw.set(inv.slot, { inv, missing: !e1 && !e2, p: [num(e1?.state), num(e2?.state)] });
+      const i1 = this._entity(inv, 'power_ch_1');
+      const i2 = this._entity(inv, 'power_ch_2');
+      raw.set(inv.slot, { inv, missing: !hass.states[i1] && !hass.states[i2], p: [value(i1), value(i2)] });
     }
 
     // orientation reference: median W/panel of all inputs on faces with the same azimuth (±5°)
@@ -418,7 +433,7 @@ class RoofPvCard extends LitElement {
     for (const [slot, r] of raw) {
       const inv = r.inv;
       const st = (k: InverterKey) => hass.states[this._entity(inv, k)];
-      const online = bool(st('online')?.state);
+      const online = at !== undefined ? null : bool(st('online')?.state);
       const inputs = ([0, 1] as const).map((i): InputState => {
         const im = model.inputs.get(inputKey(slot, i));
         const panels = im?.panels ?? 0;
@@ -445,10 +460,10 @@ class RoofPvCard extends LitElement {
         online,
         inputs,
         power,
-        temperature: num(st('temperature')?.state),
-        frequency: num(st('frequency')?.state),
-        voltage: num(st('voltage')?.state),
-        signal: num(st('signal')?.state),
+        temperature: value(this._entity(inv, 'temperature')),
+        frequency: at !== undefined ? null : num(st('frequency')?.state),
+        voltage: at !== undefined ? null : num(st('voltage')?.state),
+        signal: at !== undefined ? null : num(st('signal')?.state),
         status,
         lastUpdate: st('power_ch_1')?.attributes?.last_data_update ?? st('power_ch_1')?.last_updated,
       });
@@ -498,13 +513,13 @@ class RoofPvCard extends LitElement {
     const totalEnt = cfg.total_power_entity ? num(this.hass!.states[cfg.total_power_entity]?.state) : null;
     const energy = cfg.today_energy_entity ? this.hass!.states[cfg.today_energy_entity] : undefined;
     const wp = (cfg.panel_wp ?? 0) * this._model!.totalPanels;
-    const total = totalEnt ?? snap.total;
+    const total = this._scrubTime !== undefined ? snap.total : totalEnt ?? snap.total;
     const counts: Partial<Record<Status, number>> = {};
     for (const s of snap.inv.values()) counts[s.status] = (counts[s.status] ?? 0) + 1;
     return html`<div class="header">
       <div class="title">${cfg.title ?? 'Roof PV'}</div>
       <div class="kpis">
-        <div class="kpi"><span class="v">${fmtW(total)}</span><span class="l">now${wp ? html` · ${pct(total / wp)} of ${(wp / 1000).toFixed(1)} kWp` : nothing}</span></div>
+        <div class="kpi"><span class="v">${fmtW(total)}</span><span class="l">${this._scrubTime !== undefined ? `@${hhmm(this._scrubTime)}` : 'now'}${wp ? html` · ${pct(total / wp)} of ${(wp / 1000).toFixed(1)} kWp` : nothing}</span></div>
         ${energy
           ? html`<div class="kpi clickable" @click=${() => this._moreInfo(energy.entity_id)}>
               <span class="v">${energy.state} ${energy.attributes.unit_of_measurement ?? ''}</span><span class="l">today</span>
@@ -570,6 +585,7 @@ class RoofPvCard extends LitElement {
       const half = R * 1.32; // outer band: power rays + margin
       vb = [ccx - half, ccy - half, 2 * half, 2 * half];
       ring = this._compassRing(ccx, ccy, R, north, snap);
+      this._dial = { cx: ccx, cy: ccy, R, north };
     } else {
       const w = m.bbox.w + 2 * pad + compassW;
       const h = m.bbox.h + 2 * pad;
@@ -689,8 +705,13 @@ class RoofPvCard extends LitElement {
       ? this._legend(REL_STOPS, '0 %', '100 % of median', `bar height: 0–${this._config!.panel_wp ?? 400} W per panel · colour:`)
       : this._legend(REL_STOPS, '0 %', '100 % of median');
 
+    const scrubbing = this._scrubTime !== undefined;
     return html`<div class="roof">
-      <svg viewBox=${vb.join(' ')} preserveAspectRatio="xMidYMid meet">
+      <div class="clock ${scrubbing ? 'past' : ''}">${scrubbing ? '@' : ''}${hhmm(this._scrubTime ?? Date.now())}</div>
+      <svg viewBox=${vb.join(' ')} preserveAspectRatio="xMidYMid meet"
+        @pointermove=${(e: PointerEvent) => this._dragMove(e)}
+        @pointerup=${(e: PointerEvent) => this._dragEnd(e)}
+        @pointercancel=${(e: PointerEvent) => this._dragEnd(e)}>
         <defs>
           <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stop-color="#fff" stop-opacity="0.14"></stop>
@@ -752,27 +773,154 @@ class RoofPvCard extends LitElement {
       const [x1, y1] = pt(sp.azimuth, r0);
       const [x2, y2] = pt(sp.azimuth, r0 + len);
       const v = Math.min(1, h.p / scaleW);
-      rays.push(svg`<line x1=${x1} y1=${y1} x2=${x2} y2=${y2} class="ray" style="stroke:${scale(POWER_STOPS, 0.35 + 0.65 * v)};stroke-width:${R * 0.009}"></line>`);
+      const later = this._scrubTime !== undefined && h.t > this._scrubTime;
+      rays.push(svg`<line x1=${x1} y1=${y1} x2=${x2} y2=${y2} class="ray" style="stroke:${scale(POWER_STOPS, 0.35 + 0.65 * v)};stroke-width:${R * 0.009};opacity:${later ? 0.25 : 1}"></line>`);
       prevAz = sp.azimuth;
     }
     void prevAz;
 
-    // the sun on the circle
+    // the sun on the circle (draggable); after sunset a faint grab point at the sunset position
     let sun: SVGTemplateResult | typeof nothing = nothing;
-    if (snap.sun.elevation > SUN_H0) {
-      const [sx, sy] = pt(snap.sun.azimuth, R);
-      const r = R * 0.028;
-      const rayEls = [0, 45, 90, 135, 180, 225, 270, 315].map((a) => {
-        const rad = (a * Math.PI) / 180;
-        return svg`<line x1=${sx + Math.cos(rad) * r * 1.35} y1=${sy + Math.sin(rad) * r * 1.35} x2=${sx + Math.cos(rad) * r * 1.9} y2=${sy + Math.sin(rad) * r * 1.9} style="stroke-width:${r * 0.32}"></line>`;
-      });
-      sun = svg`<g class="sunicon"><circle cx=${sx} cy=${sy} r=${r}></circle>${rayEls}</g>`;
+    const r = R * 0.028;
+    const up = snap.sun.elevation > SUN_H0;
+    const dayInfo = this._sunDay();
+    const restAz = up ? snap.sun.azimuth : dayInfo.sunset && Date.now() > dayInfo.sunset.getTime() ? sunPosition(dayInfo.sunset, lat, lon).azimuth : undefined;
+    if (restAz !== undefined) {
+      const [sx, sy] = pt(restAz, R);
+      const rayEls = up
+        ? [0, 45, 90, 135, 180, 225, 270, 315].map((a) => {
+            const rad = (a * Math.PI) / 180;
+            return svg`<line x1=${sx + Math.cos(rad) * r * 1.35} y1=${sy + Math.sin(rad) * r * 1.35} x2=${sx + Math.cos(rad) * r * 1.9} y2=${sy + Math.sin(rad) * r * 1.9} style="stroke-width:${r * 0.32}"></line>`;
+          })
+        : nothing;
+      sun = svg`<g class="sunicon ${up ? '' : 'down'} ${this._dragging ? 'dragging' : ''}" @pointerdown=${(e: PointerEvent) => this._dragStart(e)}>
+        <circle cx=${sx} cy=${sy} r=${r * 2.6} class="grab"></circle>
+        <circle cx=${sx} cy=${sy} r=${r} class="disc" style="stroke-width:${r * 0.25}"></circle>${rayEls}
+      </g>`;
     }
 
-    return svg`<g class="compassring" pointer-events="none">
-      <circle cx=${cx} cy=${cy} r=${R} class="dial" style="stroke-width:${R * 0.006}"></circle>
-      ${rays}${ticks}${labels}${sun}
+    return svg`<g class="compassring">
+      <g pointer-events="none">
+        <circle cx=${cx} cy=${cy} r=${R} class="dial" style="stroke-width:${R * 0.006}"></circle>
+        ${rays}${ticks}${labels}
+      </g>
+      ${sun}
     </g>`;
+  }
+
+  // ---------------------------------------------------------------- time scrubbing (drag the sun)
+  private _svgPoint(e: PointerEvent): [number, number] | undefined {
+    const svgEl = this.shadowRoot?.querySelector('.roof svg') as SVGSVGElement | null;
+    const ctm = svgEl?.getScreenCTM();
+    if (!svgEl || !ctm) return undefined;
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    return [p.x, p.y];
+  }
+
+  private _dragStart(e: PointerEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (this._scrubTimer) window.clearTimeout(this._scrubTimer);
+    this._dragging = true;
+    (this.shadowRoot?.querySelector('.roof svg') as SVGSVGElement | null)?.setPointerCapture(e.pointerId);
+    this._loadInverterHistory();
+    this._dragMove(e);
+  }
+
+  private _dragMove(e: PointerEvent) {
+    if (!this._dragging || !this._dial) return;
+    const p = this._svgPoint(e);
+    if (!p) return;
+    const { cx, cy, north } = this._dial;
+    const drawAngle = (Math.atan2(p[0] - cx, -(p[1] - cy)) * 180) / Math.PI; // clockwise from up
+    const az = norm(drawAngle - north);
+    const t = this._timeForAzimuth(az);
+    if (t !== undefined) this._scrubTime = Math.round(t / 60000) * 60000;
+  }
+
+  private _dragEnd(e: PointerEvent) {
+    if (!this._dragging) return;
+    this._dragging = false;
+    try {
+      (this.shadowRoot?.querySelector('.roof svg') as SVGSVGElement | null)?.releasePointerCapture(e.pointerId);
+    } catch (_) {
+      /* ignore */
+    }
+    if (this._scrubTimer) window.clearTimeout(this._scrubTimer);
+    this._scrubTimer = window.setTimeout(() => (this._scrubTime = undefined), 30000);
+    this.requestUpdate();
+  }
+
+  /** time today (between sunrise and now/sunset) at which the sun stands at azimuth `az` */
+  private _timeForAzimuth(az: number): number | undefined {
+    const day = this._sunDay();
+    if (!day.sunrise) return undefined;
+    const t0 = day.sunrise.getTime();
+    const t1 = Math.min(Date.now(), day.sunset?.getTime() ?? Date.now());
+    if (t1 <= t0) return undefined;
+    const lat = this._lat(), lon = this._lon();
+    const steps = 240;
+    let best = t0, bestD = Infinity;
+    for (let i = 0; i <= steps; i++) {
+      const t = t0 + ((t1 - t0) * i) / steps;
+      const a = sunPosition(new Date(t), lat, lon).azimuth;
+      const d = Math.abs(((a - az + 540) % 360) - 180);
+      if (d < bestD) { bestD = d; best = t; }
+    }
+    return best;
+  }
+
+  /** value of an entity at time t from the loaded history (step-hold) */
+  private _histVal(id: string, t: number): number | null {
+    const rows = this._invHist.get(id);
+    if (!rows || !rows.length || rows[0].t > t) return null;
+    let lo = 0, hi = rows.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (rows[mid].t <= t) lo = mid;
+      else hi = mid - 1;
+    }
+    return rows[lo].v;
+  }
+
+  /** today's history of all inverter power + temperature entities (for the time scrubbing) */
+  private _loadInverterHistory() {
+    if (!this.hass?.callWS || this._invHistLoading) return;
+    if (Date.now() - this._invHistAt < 2 * 60000 && this._invHist.size) return;
+    const ids: string[] = [];
+    for (const inv of this._config!.inverters) {
+      for (const k of ['power_ch_1', 'power_ch_2', 'temperature'] as InverterKey[]) ids.push(this._entity(inv, k));
+    }
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    this._invHistLoading = true;
+    this.hass
+      .callWS<Record<string, { s: string; lu: number }[]>>({
+        type: 'history/history_during_period',
+        start_time: start.toISOString(),
+        end_time: new Date().toISOString(),
+        entity_ids: ids,
+        minimal_response: true,
+        no_attributes: true,
+      })
+      .then((res) => {
+        const map = new Map<string, { t: number; v: number | null }[]>();
+        for (const id of ids) {
+          let last = 0;
+          const rows = (res?.[id] ?? []).map((r) => {
+            last = r.lu ? r.lu * 1000 : last;
+            return { t: last, v: num(r.s) };
+          });
+          map.set(id, rows);
+        }
+        this._invHist = map;
+        this._invHistAt = Date.now();
+        this.requestUpdate();
+      })
+      .catch(() => {
+        /* history not available */
+      })
+      .finally(() => (this._invHistLoading = false));
   }
 
   /** today's total power history (for the rays around the compass) */
@@ -1248,6 +1396,26 @@ class RoofPvCard extends LitElement {
       color: var(--text-primary-color, #fff);
       border-color: var(--primary-color);
     }
+    .roof {
+      position: relative;
+    }
+    .clock {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      font-size: 1.1em;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--secondary-text-color);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .clock.past {
+      color: #ffd54f;
+    }
+    .roof svg {
+      touch-action: pan-y;
+    }
     .roof svg {
       width: 100%;
       height: auto;
@@ -1338,8 +1506,23 @@ class RoofPvCard extends LitElement {
     .compassring .ray {
       stroke-linecap: butt;
     }
-    .compassring .sunicon circle {
+    .compassring .sunicon {
+      cursor: grab;
+      touch-action: none;
+    }
+    .compassring .sunicon.dragging {
+      cursor: grabbing;
+    }
+    .compassring .sunicon .grab {
+      fill: transparent;
+    }
+    .compassring .sunicon .disc {
       fill: #ffd54f;
+      stroke: none;
+    }
+    .compassring .sunicon.down .disc {
+      fill: rgba(255, 213, 79, 0.12);
+      stroke: rgba(255, 213, 79, 0.5);
     }
     .compassring .sunicon line {
       stroke: #ffd54f;
