@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.3.0';
+const VERSION = '0.3.1';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -252,6 +252,7 @@ class RoofPvCard extends LitElement {
   /** time shown while the sun is dragged (ms), undefined = real time */
   private _scrubTime?: number;
   private _scrubTimer?: number;
+  private _replayTimer?: number;
   private _dragging = false;
   private _invHist = new Map<string, { t: number; v: number | null }[]>();
   private _invHistAt = 0;
@@ -353,6 +354,7 @@ class RoofPvCard extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     if (this._timer) window.clearInterval(this._timer);
+    this._stopReplay();
   }
 
   // ------------------------------------------------------------ entities
@@ -820,7 +822,7 @@ class RoofPvCard extends LitElement {
   private _dragStart(e: PointerEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (this._scrubTimer) window.clearTimeout(this._scrubTimer);
+    this._stopReplay();
     this._dragging = true;
     (this.shadowRoot?.querySelector('.roof svg') as SVGSVGElement | null)?.setPointerCapture(e.pointerId);
     this._loadInverterHistory();
@@ -846,9 +848,29 @@ class RoofPvCard extends LitElement {
     } catch (_) {
       /* ignore */
     }
-    if (this._scrubTimer) window.clearTimeout(this._scrubTimer);
-    this._scrubTimer = window.setTimeout(() => (this._scrubTime = undefined), 30000);
+    this._stopReplay();
+    // after 10 s run forward in 5-minute ticks back to real time (jump once the sun has set)
+    this._scrubTimer = window.setTimeout(() => {
+      this._replayTimer = window.setInterval(() => {
+        const now = Date.now();
+        const sunset = this._sunDay().sunset?.getTime();
+        const next = (this._scrubTime ?? now) + 5 * 60000;
+        if (next >= now || (sunset !== undefined && next >= sunset)) {
+          this._stopReplay();
+          this._scrubTime = undefined;
+        } else {
+          this._scrubTime = next;
+        }
+      }, 150);
+    }, 10000);
     this.requestUpdate();
+  }
+
+  private _stopReplay() {
+    if (this._scrubTimer) window.clearTimeout(this._scrubTimer);
+    if (this._replayTimer) window.clearInterval(this._replayTimer);
+    this._scrubTimer = undefined;
+    this._replayTimer = undefined;
   }
 
   /** time today (between sunrise and now/sunset) at which the sun stands at azimuth `az` */
