@@ -4,11 +4,11 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
     </ha-card>`}_renderHeader(t){const e=this._config,s=e.total_power_entity?zt(this.hass.states[e.total_power_entity]?.state):null,i=e.today_energy_entity?this.hass.states[e.today_energy_entity]:void 0,n=(e.panel_wp??0)*this._model.totalPanels,o=void 0!==this._scrubTime?t.total:s??t.total,r={};for(const e of t.inv.values())r[e.status]=(r[e.status]??0)+1;return q`<div class="header">
       <div class="title">${e.title??"Roof PV"}</div>
       <div class="kpis">
-        <div class="kpi"><span class="v">${Pt(o)}</span><span class="l">${void 0!==this._scrubTime?`@${Rt(this._scrubTime)}`:"now"}${n?q` · ${Ht(o/n)} of ${(n/1e3).toFixed(1)} kWp`:B}</span></div>
-        ${i?q`<div class="kpi clickable" @click=${()=>this._moreInfo(i.entity_id)}>
+        <div class="kpi power"><span class="v">${Pt(o)}</span><span class="l">${void 0!==this._scrubTime?`@${Rt(this._scrubTime)}`:"now"}${n?q` · ${Ht(o/n)} of ${(n/1e3).toFixed(1)} kWp`:B}</span></div>
+        ${i?q`<div class="kpi energy clickable" @click=${()=>this._moreInfo(i.entity_id)}>
               <span class="v">${i.state} ${i.attributes.unit_of_measurement??""}</span><span class="l">today</span>
             </div>`:B}
-        <div class="kpi">
+        <div class="kpi status">
           <span class="v status-row">
             ${["offline","fault","low","missing"].filter(t=>r[t]).map(t=>q`<span class="chip" style="--c:${bt[t]}">${r[t]} ${xt[t]}</span>`)}
             ${r.offline||r.fault||r.low||r.missing?B:q`<span class="chip" style="--c:${t.day?bt.ok:bt.night}">${t.inv.size} ${t.day?"ok":"night"}</span>`}
@@ -218,11 +218,36 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
     .kpis {
       display: flex;
       gap: 18px;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      min-width: 0;
     }
+    /* fixed widths and single lines so the header never changes size while values change */
     .kpi {
       display: flex;
       flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .kpi .v,
+    .kpi .l {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi.power {
+      width: 13em;
+    }
+    .kpi.energy {
+      width: 6.5em;
+    }
+    .kpi.status {
+      width: 15em;
+    }
+    .kpi .status-row {
+      display: block;
+      height: 1.6em;
+      line-height: 1.6em;
     }
     .kpi .v {
       font-size: 1.15em;
@@ -705,6 +730,13 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
       color: #fb8c00;
     }
     @media (max-width: 600px) {
+      .kpis {
+        flex-wrap: wrap;
+        gap: 4px 14px;
+      }
+      .kpi.power {
+        width: 11.5em;
+      }
       .sun {
         grid-template-columns: 1fr;
       }
@@ -716,4 +748,4 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
         grid-template-columns: 1fr 1fr;
       }
     }
-  `,customElements.get("roof-pv-card")||customElements.define("roof-pv-card",jt),window.customCards=window.customCards||[],window.customCards.push({type:"roof-pv-card",name:"Roof PV Card",description:"Ennogie-style roof visualisation of a PV system with micro inverters",preview:!1,documentationURL:"https://github.com/MrJones4u/HA-card-ennogie-style-roof-visualisation"}),console.info("%c ROOF-PV-CARD %c 0.3.1 ","color:#fff;background:#1d5fa3;font-weight:700","color:#1d5fa3;background:#fff");
+  `,customElements.get("roof-pv-card")||customElements.define("roof-pv-card",jt),window.customCards=window.customCards||[],window.customCards.push({type:"roof-pv-card",name:"Roof PV Card",description:"Ennogie-style roof visualisation of a PV system with micro inverters",preview:!1,documentationURL:"https://github.com/MrJones4u/HA-card-ennogie-style-roof-visualisation"}),console.info("%c ROOF-PV-CARD %c 0.3.2 ","color:#fff;background:#1d5fa3;font-weight:700","color:#1d5fa3;background:#fff");

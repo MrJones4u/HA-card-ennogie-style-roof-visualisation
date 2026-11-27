@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.3.1';
+const VERSION = '0.3.2';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -521,13 +521,13 @@ class RoofPvCard extends LitElement {
     return html`<div class="header">
       <div class="title">${cfg.title ?? 'Roof PV'}</div>
       <div class="kpis">
-        <div class="kpi"><span class="v">${fmtW(total)}</span><span class="l">${this._scrubTime !== undefined ? `@${hhmm(this._scrubTime)}` : 'now'}${wp ? html` · ${pct(total / wp)} of ${(wp / 1000).toFixed(1)} kWp` : nothing}</span></div>
+        <div class="kpi power"><span class="v">${fmtW(total)}</span><span class="l">${this._scrubTime !== undefined ? `@${hhmm(this._scrubTime)}` : 'now'}${wp ? html` · ${pct(total / wp)} of ${(wp / 1000).toFixed(1)} kWp` : nothing}</span></div>
         ${energy
-          ? html`<div class="kpi clickable" @click=${() => this._moreInfo(energy.entity_id)}>
+          ? html`<div class="kpi energy clickable" @click=${() => this._moreInfo(energy.entity_id)}>
               <span class="v">${energy.state} ${energy.attributes.unit_of_measurement ?? ''}</span><span class="l">today</span>
             </div>`
           : nothing}
-        <div class="kpi">
+        <div class="kpi status">
           <span class="v status-row">
             ${(['offline', 'fault', 'low', 'missing'] as Status[]).filter((s) => counts[s]).map(
               (s) => html`<span class="chip" style="--c:${STATUS_COLOR[s]}">${counts[s]} ${STATUS_LABEL[s]}</span>`,
@@ -1364,11 +1364,36 @@ class RoofPvCard extends LitElement {
     .kpis {
       display: flex;
       gap: 18px;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      min-width: 0;
     }
+    /* fixed widths and single lines so the header never changes size while values change */
     .kpi {
       display: flex;
       flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .kpi .v,
+    .kpi .l {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi.power {
+      width: 13em;
+    }
+    .kpi.energy {
+      width: 6.5em;
+    }
+    .kpi.status {
+      width: 15em;
+    }
+    .kpi .status-row {
+      display: block;
+      height: 1.6em;
+      line-height: 1.6em;
     }
     .kpi .v {
       font-size: 1.15em;
@@ -1851,6 +1876,13 @@ class RoofPvCard extends LitElement {
       color: #fb8c00;
     }
     @media (max-width: 600px) {
+      .kpis {
+        flex-wrap: wrap;
+        gap: 4px 14px;
+      }
+      .kpi.power {
+        width: 11.5em;
+      }
       .sun {
         grid-template-columns: 1fr;
       }
