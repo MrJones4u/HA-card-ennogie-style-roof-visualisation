@@ -11,10 +11,10 @@ import {
   inputKey,
   norm,
 } from './model';
-import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
+import { SunDay, SunPos, incidence, incidenceRaw, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.4.0';
+const VERSION = '0.4.1';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -879,8 +879,33 @@ class RoofPvCard extends LitElement {
     const pts = day.path.filter((p) => p.elevation >= -1).map((p) => pos(p.azimuth, p.elevation).map((v) => v.toFixed(3)).join(',')).join(' ');
     if (!pts) return nothing;
     void snap;
+    // tiny dots where the sun rises above / falls below the plane of each roof orientation (incidence = 0)
+    const lat = this._lat(), lon = this._lon();
+    const seen = new Set<string>();
+    const dots: SVGTemplateResult[] = [];
+    for (const f of this._model!.faces) {
+      const k = `${Math.round(f.azimuth)}|${f.tilt}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const names = this._model!.faces.filter((g) => `${Math.round(g.azimuth)}|${g.tilt}` === k).map((g) => g.name).join(', ');
+      const path = day.path.filter((p) => p.elevation > SUN_H0);
+      for (let i = 1; i < path.length; i++) {
+        const c0 = incidenceRaw(path[i - 1], f.azimuth, f.tilt);
+        const c1 = incidenceRaw(path[i], f.azimuth, f.tilt);
+        if ((c0 <= 0) === (c1 <= 0)) continue;
+        const frac = c0 / (c0 - c1);
+        const t = path[i - 1].t.getTime() + frac * (path[i].t.getTime() - path[i - 1].t.getTime());
+        const sp = sunPosition(new Date(t), lat, lon);
+        const [x, y] = pos(sp.azimuth, sp.elevation);
+        const rising = c1 > 0;
+        dots.push(svg`<circle cx=${x} cy=${y} r=${R * 0.011} class="planedot" pointer-events="all">
+          <title>${names}: sun ${rising ? 'rises above' : 'falls below'} the roof plane at ${hhmm(t)}</title>
+        </circle>`);
+      }
+    }
     return svg`<g class="sunpathmain" pointer-events="none">
       <polyline points=${pts} style="stroke-width:${R * 0.006};stroke-dasharray:${R * 0.03} ${R * 0.02}"></polyline>
+      ${dots}
     </g>`;
   }
 
@@ -1875,6 +1900,11 @@ class RoofPvCard extends LitElement {
       fill: none;
       stroke: #f2c14e;
       opacity: 0.85;
+    }
+    .sunpathmain .planedot {
+      fill: #fff;
+      stroke: #f2c14e;
+      stroke-width: 0.04;
     }
     .sunpathmain circle {
       fill: #ffd54f;

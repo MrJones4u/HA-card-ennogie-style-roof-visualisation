@@ -89,3 +89,10 @@ export function incidence(sun: SunPos, faceAzimuth: number, tilt: number): numbe
   const c = Math.sin(e) * Math.cos(b) + Math.cos(e) * Math.sin(b) * Math.cos((sun.azimuth - faceAzimuth) * RAD);
   return Math.max(0, c);
 }
+
+/** signed cosine of the angle of incidence (negative = sun behind the plane), ignoring the horizon */
+export function incidenceRaw(sun: SunPos, faceAzimuth: number, tilt: number): number {
+  const e = sun.elevation * RAD;
+  const b = tilt * RAD;
+  return Math.sin(e) * Math.cos(b) + Math.cos(e) * Math.sin(b) * Math.cos((sun.azimuth - faceAzimuth) * RAD);
+}

@@ -55,7 +55,7 @@ The card is configured in YAML (no visual editor yet). See [`examples/example.ya
 | `slot_labels` | `eave` | Inverter numbers at the downhill edge of each face (`eave`), on the panels (`center`) or `none` |
 | `face_labels` | `false` | Show face name, orientation and slope arrow on the drawing |
 | `view` | `compass` | Roof view: `compass` (roof inside a compass circle, N/E/S/W rotated by `north`) or `plan`; both square, toggle in the header |
-| `sun_path` | `false` | Compass view: draw today's sun path as a dashed line (centre = sun overhead, circle = horizon) with the current position |
+| `sun_path` | `false` | Compass view: draw today's sun path as a dashed line (centre = sun overhead, circle = horizon); the sun sits on it. Small white dots mark where the sun rises above / falls below the plane of each roof orientation (from the faces' azimuth and tilt); hover for the time |
 | `mode` | `power` | Initial colour mode, `power` or `relative` |
 | `show` | all | Sections and their order: `header`, `roof`, `sun`, `strings`, `inverters`, `inventory` |
 | `daylight_elevation` | `5` | Sun elevation (°) above which missing data counts as offline |
