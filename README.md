@@ -26,10 +26,14 @@ Copy `dist/roof-pv-card.js` to `/config/www/roof-pv-card.js` and add a dashboard
 
 ## Configuration
 
+Note: files under `/config/www` are served at `/local/…` without login, so a `config_url` file is readable by anyone who can reach your Home Assistant.
+
+
 The card is configured in YAML (no visual editor yet). See [`examples/example.yaml`](examples/example.yaml).
 
 | Option | Default | Description |
 |---|---|---|
+| `config_url` | – | Load the configuration (faces, inverters, …) from a JSON file, e.g. `/local/roof-pv-card/site.json` in `/config/www/roof-pv-card/`. Options written in the card override the file. Handy for big roofs and for editing the layout outside the dashboard editor |
 | `title` | `Roof PV` | Card title |
 | `panel_wp` | `400` | Peak power of one panel (W), scales the colours and kWp figures |
 | `north` | `0` | Direction of north in your drawing, degrees **clockwise from up**. Face azimuths are derived from it |

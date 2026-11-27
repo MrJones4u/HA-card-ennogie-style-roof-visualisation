@@ -48,6 +48,8 @@ export type SectionName = 'header' | 'roof' | 'sun' | 'strings' | 'inverters' | 
 
 export interface CardConfig {
   type: string;
+  /** load the rest of the config (faces, inverters, …) from a JSON file, e.g. /local/roof-pv-card/site.json; inline options override it */
+  config_url?: string;
   title?: string;
   panel_wp?: number;
   /** direction of north in the drawing, degrees clockwise from "up" */

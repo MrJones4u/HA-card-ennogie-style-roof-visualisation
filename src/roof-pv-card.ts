@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.2.0';
+const VERSION = '0.2.1';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -181,6 +181,7 @@ class RoofPvCard extends LitElement {
     _config: { state: true },
     _mode: { state: true },
     _view: { state: true },
+    _loadError: { state: true },
     _selected: { state: true },
     _hoverKey: { state: true },
     _tick: { state: true },
@@ -196,6 +197,8 @@ class RoofPvCard extends LitElement {
   private _mode: 'power' | 'relative' = 'power';
   private _view: 'compass' | 'plan' = 'compass';
   private _circle?: { cx: number; cy: number; r: number };
+  private _loadError?: string;
+  private _loadSeq = 0;
   private _selected?: number;
   private _hoverKey?: string;
   private _tick = 0;
@@ -221,6 +224,36 @@ class RoofPvCard extends LitElement {
   }
 
   setConfig(config: CardConfig) {
+    if (config?.config_url) {
+      // site data (faces, inverters, …) comes from a JSON file; inline options override it
+      const seq = ++this._loadSeq;
+      this._loadError = undefined;
+      const url = config.config_url + (config.config_url.includes('?') ? '&' : '?') + 't=' + Date.now();
+      fetch(url, { cache: 'no-store' })
+        .then((r) => {
+          if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+          return r.json();
+        })
+        .then((remote) => {
+          if (seq !== this._loadSeq) return;
+          const merged = { ...remote, ...config } as CardConfig;
+          try {
+            this._applyConfig(merged);
+          } catch (e) {
+            this._loadError = String((e as Error).message ?? e);
+          }
+          this.requestUpdate();
+        })
+        .catch((e) => {
+          if (seq !== this._loadSeq) return;
+          this._loadError = `could not load ${config.config_url}: ${e.message ?? e}`;
+        });
+      return;
+    }
+    this._applyConfig(config);
+  }
+
+  private _applyConfig(config: CardConfig) {
     if (!config || !Array.isArray(config.faces) || !config.faces.length) throw new Error('roof-pv-card: "faces" is required');
     if (!Array.isArray(config.inverters) || !config.inverters.length) throw new Error('roof-pv-card: "inverters" is required');
     this._config = config;
@@ -383,7 +416,8 @@ class RoofPvCard extends LitElement {
 
   // ------------------------------------------------------------ render
   protected render(): TemplateResult | typeof nothing {
-    if (!this._config || !this._model || !this.hass) return nothing;
+    if (this._loadError) return html`<ha-card><div class="warn" style="padding:12px">roof-pv-card: ${this._loadError}</div></ha-card>`;
+    if (!this._config || !this._model || !this.hass) return html`<ha-card><div class="hint" style="padding:12px">loading…</div></ha-card>`;
     const snap = this._snapshot();
     const show = this._config.show ?? DEFAULT_SHOW;
     const parts: Record<SectionName, () => TemplateResult | typeof nothing> = {
