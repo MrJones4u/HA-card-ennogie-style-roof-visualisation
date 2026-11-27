@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.2.4';
+const VERSION = '0.2.5';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -91,6 +91,8 @@ const POWER_STOPS: [number, string][] = [
   [0.82, '#f2c14e'],
   [1, '#fff1b8'],
 ];
+/** sun above the horizon = same definition as sunrise/sunset (refraction + sun radius) */
+const SUN_H0 = -0.833;
 const PANEL_BG = '#0e1a2b';
 const BAR_NEUTRAL = '#2fa8d5';
 const REL_STOPS: [number, string][] = [
@@ -757,7 +759,7 @@ class RoofPvCard extends LitElement {
 
     // the sun on the circle
     let sun: SVGTemplateResult | typeof nothing = nothing;
-    if (snap.sun.elevation > -0.5) {
+    if (snap.sun.elevation > SUN_H0) {
       const [sx, sy] = pt(snap.sun.azimuth, R);
       const r = R * 0.028;
       const rayEls = [0, 45, 90, 135, 180, 225, 270, 315].map((a) => {
@@ -966,7 +968,7 @@ class RoofPvCard extends LitElement {
       return [Math.sin(ang(az)) * r, -Math.cos(ang(az)) * r];
     };
     const path = day.path.map((p) => pos(p.azimuth, p.elevation).map((v) => v.toFixed(1)).join(',')).join(' ');
-    const sunNow = snap.sun.elevation > -1 ? pos(snap.sun.azimuth, snap.sun.elevation) : null;
+    const sunNow = snap.sun.elevation > SUN_H0 ? pos(snap.sun.azimuth, snap.sun.elevation) : null;
     const rise = day.sunrise ? sunPosition(day.sunrise, this._lat(), this._lon()) : null;
     const set = day.sunset ? sunPosition(day.sunset, this._lat(), this._lon()) : null;
     const cardinals = [['N', 0], ['E', 90], ['S', 180], ['W', 270]] as const;
@@ -1022,7 +1024,7 @@ class RoofPvCard extends LitElement {
       </svg>
       <div class="suninfo">
         <div class="sunline">
-          <span>☀ ${snap.sun.elevation > 0 ? `${Math.round(snap.sun.azimuth)}° az · ${Math.round(snap.sun.elevation)}° el` : 'below horizon'}</span>
+          <span>☀ ${snap.sun.elevation > SUN_H0 ? `${Math.round(snap.sun.azimuth)}° az · ${Math.round(snap.sun.elevation)}° el` : 'below horizon'}</span>
           <span class="muted">↑ ${fmtTime(day.sunrise)} · ↓ ${fmtTime(day.sunset)}</span>
         </div>
         <table class="faces">
