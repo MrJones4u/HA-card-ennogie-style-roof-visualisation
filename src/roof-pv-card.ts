@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.3.5';
+const VERSION = '0.3.6';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -820,7 +820,7 @@ class RoofPvCard extends LitElement {
       if (!d) continue;
       const a = sunPosition(d, lat, lon).azimuth;
       const [x1, y1] = pt(a, R * 1.012);
-      const [x2, y2] = pt(a, R * 0.93);
+      const [x2, y2] = pt(a, R * 0.988); // same length inside as outside
       riseSet.push(svg`<line x1=${x1} y1=${y1} x2=${x2} y2=${y2} class="risesettick" style="stroke-width:${R * 0.008}"></line>`);
     }
     // between sunset and sunrise: small white dot at the sun's (virtual) position below the horizon
