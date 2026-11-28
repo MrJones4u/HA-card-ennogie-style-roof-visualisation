@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, incidenceRaw, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.4.2';
+const VERSION = '0.4.3';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -558,11 +558,11 @@ class RoofPvCard extends LitElement {
           <span class="l">${snap.inv.size} inverters · ${this._model!.totalPanels} panels</span>
         </div>
       </div>
-      <div class="modes">
+      <div class="modes view">
         <button class=${this._view === 'compass' ? 'on' : ''} @click=${() => (this._view = 'compass')} title="Roof inside a compass">Compass</button>
         <button class=${this._view === 'plan' ? 'on' : ''} @click=${() => (this._view = 'plan')} title="Roof plan">Plan</button>
       </div>
-      <div class="modes">
+      <div class="modes mode">
         <button class=${this._mode === 'power' ? 'on' : ''} @click=${() => (this._mode = 'power')}>Power</button>
         <button class=${this._mode === 'relative' ? 'on' : ''} @click=${() => (this._mode = 'relative')}>Relative</button>
       </div>
@@ -1635,12 +1635,26 @@ class RoofPvCard extends LitElement {
       padding: 12px 14px 14px;
       overflow: hidden;
     }
+    /* row 1: title + toggles, row 2: values – fixed structure, never overflows */
     .header {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      grid-template-areas: 'title view mode' 'kpis kpis kpis';
       align-items: center;
-      gap: 8px 18px;
+      gap: 8px 10px;
       margin-bottom: 8px;
+    }
+    .header .title {
+      grid-area: title;
+    }
+    .header .kpis {
+      grid-area: kpis;
+    }
+    .header .modes.view {
+      grid-area: view;
+    }
+    .header .modes.mode {
+      grid-area: mode;
     }
     .title {
       font-size: 1.25em;
@@ -1649,9 +1663,8 @@ class RoofPvCard extends LitElement {
     }
     .kpis {
       display: flex;
-      gap: 18px;
-      flex-wrap: nowrap;
-      min-width: 0;
+      gap: 6px 22px;
+      flex-wrap: wrap;
     }
     /* fixed widths and single lines so the header never changes size while values change */
     .kpi {
@@ -1714,6 +1727,10 @@ class RoofPvCard extends LitElement {
       color: var(--primary-text-color);
       border: 1px solid var(--c);
       margin-right: 4px;
+    }
+    .modes {
+      flex: 0 0 auto;
+      display: flex;
     }
     .modes button {
       background: none;

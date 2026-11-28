@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>body{background:#111;color:#e1e1e1;font-family:Roboto,Arial,sans-serif;margin:0;padding:16px;--primary-text-color:#e1e1e1;--secondary-text-color:#9b9b9b;--primary-color:#03a9f4;--divider-color:#3a3a3a;--secondary-background-color:#202020}
+ha-card{display:block;background:#1c1c1c;border-radius:12px;max-width:var(--w,1000px)}</style>
+<script>
+const RealDate = Date; const FIXED = new RealDate(new URLSearchParams(location.search).get('t')).getTime();
+class FakeDate extends RealDate { constructor(...a){ if(a.length) super(...a); else super(FIXED); } static now(){ return FIXED; } }
+window.Date = FakeDate;
+</script>
+<script src="data.js"></script><script src="july.js"></script>
+<script type="module">
+import '../dist/roof-pv-card.js';
+const now = Date.now()/1000;
+const val = (rows) => { let v = null; for (const r of rows) { if (r.lu <= now) v = r.s; else break; } return v; };
+const states = {};
+for (const [id, s] of Object.entries(window.STATES)) states[id] = { ...s };
+for (const [id, rows] of Object.entries(window.JHIST)) {
+  const v = val(rows); states[id] = { entity_id: id, state: v ?? '0', attributes: {}, last_changed: '', last_updated: '' };
+}
+const el = document.createElement('roof-pv-card');
+const cfg = window.CFG; cfg.today_energy_entity = undefined;
+{ const q2 = new URLSearchParams(location.search); if (q2.get('title')) cfg.title = q2.get('title'); if (q2.get('mode')) cfg.mode = q2.get('mode'); if (q2.get('view')) cfg.view = q2.get('view'); cfg.show = (q2.get('show')||'header,roof').split(','); }
+el.setConfig(cfg);
+el.hass = { states, config: { latitude: 49.9597, longitude: 7.8702 },
+  callWS: async (m) => { const o = {}; for (const id of m.entity_ids) o[id] = (window.JHIST[id]||[]).filter(r => r.lu <= now); return o; } };
+document.body.appendChild(el);
+</script></head><body></body></html>

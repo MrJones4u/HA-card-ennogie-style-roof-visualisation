@@ -16,11 +16,11 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
           <span class="l">${t.inv.size} inverters · ${this._model.totalPanels} panels</span>
         </div>
       </div>
-      <div class="modes">
+      <div class="modes view">
         <button class=${"compass"===this._view?"on":""} @click=${()=>this._view="compass"} title="Roof inside a compass">Compass</button>
         <button class=${"plan"===this._view?"on":""} @click=${()=>this._view="plan"} title="Roof plan">Plan</button>
       </div>
-      <div class="modes">
+      <div class="modes mode">
         <button class=${"power"===this._mode?"on":""} @click=${()=>this._mode="power"}>Power</button>
         <button class=${"relative"===this._mode?"on":""} @click=${()=>this._mode="relative"}>Relative</button>
       </div>
@@ -218,12 +218,26 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
       padding: 12px 14px 14px;
       overflow: hidden;
     }
+    /* row 1: title + toggles, row 2: values – fixed structure, never overflows */
     .header {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      grid-template-areas: 'title view mode' 'kpis kpis kpis';
       align-items: center;
-      gap: 8px 18px;
+      gap: 8px 10px;
       margin-bottom: 8px;
+    }
+    .header .title {
+      grid-area: title;
+    }
+    .header .kpis {
+      grid-area: kpis;
+    }
+    .header .modes.view {
+      grid-area: view;
+    }
+    .header .modes.mode {
+      grid-area: mode;
     }
     .title {
       font-size: 1.25em;
@@ -232,9 +246,8 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
     }
     .kpis {
       display: flex;
-      gap: 18px;
-      flex-wrap: nowrap;
-      min-width: 0;
+      gap: 6px 22px;
+      flex-wrap: wrap;
     }
     /* fixed widths and single lines so the header never changes size while values change */
     .kpi {
@@ -297,6 +310,10 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
       color: var(--primary-text-color);
       border: 1px solid var(--c);
       margin-right: 4px;
+    }
+    .modes {
+      flex: 0 0 auto;
+      display: flex;
     }
     .modes button {
       background: none;
@@ -831,4 +848,4 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
         grid-template-columns: 1fr 1fr;
       }
     }
-  `,customElements.get("roof-pv-card")||customElements.define("roof-pv-card",Ft),window.customCards=window.customCards||[],window.customCards.push({type:"roof-pv-card",name:"Roof PV Card",description:"Ennogie-style roof visualisation of a PV system with micro inverters",preview:!1,documentationURL:"https://github.com/MrJones4u/HA-card-ennogie-style-roof-visualisation"}),console.info("%c ROOF-PV-CARD %c 0.4.2 ","color:#fff;background:#1d5fa3;font-weight:700","color:#1d5fa3;background:#fff");
+  `,customElements.get("roof-pv-card")||customElements.define("roof-pv-card",Ft),window.customCards=window.customCards||[],window.customCards.push({type:"roof-pv-card",name:"Roof PV Card",description:"Ennogie-style roof visualisation of a PV system with micro inverters",preview:!1,documentationURL:"https://github.com/MrJones4u/HA-card-ennogie-style-roof-visualisation"}),console.info("%c ROOF-PV-CARD %c 0.4.3 ","color:#fff;background:#1d5fa3;font-weight:700","color:#1d5fa3;background:#fff");

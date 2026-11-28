@@ -1,6 +1,17 @@
 # Roof PV Card – Ennogie-style roof visualisation
 
+> **⚠️ Work in progress.** This card is under active development. Options, defaults and the look can still change between versions, and some features are only tested on one installation. Feedback and issues are welcome.
+
 A Home Assistant Lovelace card that draws your roof panel by panel and colours every panel by what its micro inverter input is producing right now. Built for integrated solar roofs (Ennogie and similar) with many small modules on dual-input micro inverters (APsystems DS3 / YC600 via the `apsystems_ecu_reader` integration), but the entity naming is configurable.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MrJones4u/HA-card-ennogie-style-roof-visualisation/master/docs/summer-midday.png" width="49%" alt="Compass view on a summer day at midday: panels with power bars, sun path, power rays around the circle">
+  <img src="https://raw.githubusercontent.com/MrJones4u/HA-card-ennogie-style-roof-visualisation/master/docs/summer-evening.png" width="49%" alt="The same day in the evening: the south-west faces still produce, power rays almost all the way round">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MrJones4u/HA-card-ennogie-style-roof-visualisation/master/docs/time-travel.png" width="49%" alt="Time travel: the sun dragged back to the morning, panels show the state at that time">
+  <img src="https://raw.githubusercontent.com/MrJones4u/HA-card-ennogie-style-roof-visualisation/master/docs/plan-relative.png" width="49%" alt="Plan view in relative mode: every panel coloured by its output compared with panels facing the same way">
+</p>
 
 ## Features
 
