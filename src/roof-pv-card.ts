@@ -14,7 +14,7 @@ import {
 import { SunDay, SunPos, incidence, incidenceRaw, sunDay, sunPosition } from './sun';
 import { outlinePath } from './outline';
 
-const VERSION = '0.4.1';
+const VERSION = '0.4.2';
 
 // ---------------------------------------------------------------- HA types (minimal)
 interface HassEntity {
@@ -654,7 +654,7 @@ class RoofPvCard extends LitElement {
           ? svg`<rect x=${c.x + 0.025} y=${c.y + 0.025} width=${c.w - 0.05} height=${c.h - 0.05} fill="url(#hatch-${status})" pointer-events="none"></rect>`
           : nothing}
         ${status === 'fault' || status === 'low'
-          ? svg`<rect x=${c.x + 0.06} y=${c.y + 0.06} width=${c.w - 0.12} height=${c.h - 0.12} fill="none" stroke=${STATUS_COLOR[status]} stroke-width="0.05" pointer-events="none"></rect>`
+          ? svg`<rect x=${c.x + 0.05} y=${c.y + 0.05} width=${c.w - 0.1} height=${c.h - 0.1} fill="none" stroke=${STATUS_COLOR[status]} stroke-width="0.025" pointer-events="none"></rect>`
           : nothing}
         ${picked ? svg`<circle cx=${c.x + c.w / 2} cy=${c.y + c.h / 2} r=${Math.min(c.w, c.h) * 0.22} class="pick" pointer-events="none"></circle>` : nothing}
         ${hl ? svg`<rect x=${c.x + 0.025} y=${c.y + 0.025} width=${c.w - 0.05} height=${c.h - 0.05} class="hl" pointer-events="none"></rect>` : nothing}
@@ -745,10 +745,10 @@ class RoofPvCard extends LitElement {
             <stop offset="1" stop-color="#000" stop-opacity="0.15"></stop>
           </linearGradient>
           <pattern id="hatch-offline" width="0.18" height="0.18" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="0.06" height="0.18" fill="#e53935" opacity="0.8"></rect>
+            <rect width="0.03" height="0.18" fill="#e53935" opacity="0.8"></rect>
           </pattern>
           <pattern id="hatch-missing" width="0.18" height="0.18" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="0.06" height="0.18" fill="#9e9e9e" opacity="0.7"></rect>
+            <rect width="0.03" height="0.18" fill="#9e9e9e" opacity="0.7"></rect>
           </pattern>
         </defs>
         <g transform=${rot && this._dial ? `rotate(${rot} ${this._dial.cx} ${this._dial.cy})` : ''}>

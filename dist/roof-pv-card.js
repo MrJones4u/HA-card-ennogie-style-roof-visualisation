@@ -31,7 +31,7 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
         ${o&&a>.005?W`<rect x=${e.x+r} y=${e.y+e.h-r-a} width=${e.w-.16} height=${a} fill=${o.color} rx="0.02" pointer-events="none"></rect>`:K}
         <rect x=${e.x+.025} y=${e.y+.025} width=${e.w-.05} height=${e.h-.05} fill="url(#glass)" pointer-events="none"></rect>
         ${"offline"===i||"missing"===i?W`<rect x=${e.x+.025} y=${e.y+.025} width=${e.w-.05} height=${e.h-.05} fill="url(#hatch-${i})" pointer-events="none"></rect>`:K}
-        ${"fault"===i||"low"===i?W`<rect x=${e.x+.06} y=${e.y+.06} width=${e.w-.12} height=${e.h-.12} fill="none" stroke=${kt[i]} stroke-width="0.05" pointer-events="none"></rect>`:K}
+        ${"fault"===i||"low"===i?W`<rect x=${e.x+.05} y=${e.y+.05} width=${e.w-.1} height=${e.h-.1} fill="none" stroke=${kt[i]} stroke-width="0.025" pointer-events="none"></rect>`:K}
         ${u?W`<circle cx=${e.x+e.w/2} cy=${e.y+e.h/2} r=${.22*Math.min(e.w,e.h)} class="pick" pointer-events="none"></circle>`:K}
         ${p?W`<rect x=${e.x+.025} y=${e.y+.025} width=${e.w-.05} height=${e.h-.05} class="hl" pointer-events="none"></rect>`:K}
       </g>`}),g=[];for(const t of e.faces){const e=new Map;for(const s of t.cells){if(void 0===s.slot)continue;const t=e.get(s.slot)??{x:0,y:0,n:0};t.x+=s.x+s.w/2,t.y+=s.y+s.h/2,t.n++,e.set(s.slot,t)}const i=t.bbox,n=.38;for(const[o,a]of e){const e=a.x/a.n,l=a.y/a.n;if("none"===s)continue;if("center"===s||!t.slope){g.push(W`<text class="slot" x=${e} y=${l} pointer-events="none" transform=${`rotate(${-r} ${e} ${l})`}>${o}</text>`);continue}const c=t.cells.filter(t=>t.slot===o),h="down"===t.slope||"up"===t.slope,d=e=>"down"===t.slope?e.row:"up"===t.slope?-e.row:"right"===t.slope?e.col:-e.col,p=Math.max(...c.map(d)),u=c.filter(t=>d(t)===p),f=u.reduce((t,e)=>t+(h?e.x+e.w/2:e.y+e.h/2),0)/u.length,[_,m]="down"===t.slope?[f,i.y+i.h+n]:"up"===t.slope?[f,i.y-n]:"left"===t.slope?[i.x-n,f]:[i.x+i.w+n,f],$=this._selected===o;g.push(W`<text class="slot eave ${$?"sel":""}" x=${_} y=${m} transform=${`rotate(${-r} ${_} ${m})`} @click=${()=>this._select(o)}>${o}</text>`)}}const _=e.faces.map((e,s)=>{const i=e.bbox,o=t.faces[s],r=i.x+i.w/2,a=i.y+i.h/2,l=e.slope?{up:0,right:90,down:180,left:270}[e.slope]:pt(e.azimuth+n);return W`<g class="facelabel" pointer-events="none">
@@ -59,10 +59,10 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
             <stop offset="1" stop-color="#000" stop-opacity="0.15"></stop>
           </linearGradient>
           <pattern id="hatch-offline" width="0.18" height="0.18" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="0.06" height="0.18" fill="#e53935" opacity="0.8"></rect>
+            <rect width="0.03" height="0.18" fill="#e53935" opacity="0.8"></rect>
           </pattern>
           <pattern id="hatch-missing" width="0.18" height="0.18" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="0.06" height="0.18" fill="#9e9e9e" opacity="0.7"></rect>
+            <rect width="0.03" height="0.18" fill="#9e9e9e" opacity="0.7"></rect>
           </pattern>
         </defs>
         <g transform=${r&&this._dial?`rotate(${r} ${this._dial.cx} ${this._dial.cy})`:""}>
@@ -831,4 +831,4 @@ const t=globalThis,e=t.ShadowRoot&&(void 0===t.ShadyCSS||t.ShadyCSS.nativeShadow
         grid-template-columns: 1fr 1fr;
       }
     }
-  `,customElements.get("roof-pv-card")||customElements.define("roof-pv-card",Ft),window.customCards=window.customCards||[],window.customCards.push({type:"roof-pv-card",name:"Roof PV Card",description:"Ennogie-style roof visualisation of a PV system with micro inverters",preview:!1,documentationURL:"https://github.com/MrJones4u/HA-card-ennogie-style-roof-visualisation"}),console.info("%c ROOF-PV-CARD %c 0.4.1 ","color:#fff;background:#1d5fa3;font-weight:700","color:#1d5fa3;background:#fff");
+  `,customElements.get("roof-pv-card")||customElements.define("roof-pv-card",Ft),window.customCards=window.customCards||[],window.customCards.push({type:"roof-pv-card",name:"Roof PV Card",description:"Ennogie-style roof visualisation of a PV system with micro inverters",preview:!1,documentationURL:"https://github.com/MrJones4u/HA-card-ennogie-style-roof-visualisation"}),console.info("%c ROOF-PV-CARD %c 0.4.2 ","color:#fff;background:#1d5fa3;font-weight:700","color:#1d5fa3;background:#fff");

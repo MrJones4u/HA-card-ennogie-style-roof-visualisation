@@ -1,6 +1,6 @@
 {
   "name": "roof-pv-card",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Home Assistant Lovelace card: Ennogie-style roof visualisation of a PV system with micro inverters",
   "type": "module",
   "license": "MIT",
